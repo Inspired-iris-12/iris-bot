@@ -3,6 +3,14 @@
 // In a real application, this would connect to Mistral API
 
 type ConversationType = 'idea' | 'feedback' | 'concern' | 'general';
+type ConversationStage = 'initial' | 'ongoing' | 'confirmation' | 'completed';
+
+type MessageType = {
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: Date;
+};
 
 // System prompts for different conversation types
 const systemPrompts = {
@@ -62,6 +70,7 @@ When responding to feedback:
 - Validate their perspective
 - If appropriate, explain the reasoning behind current policies or practices
 - Indicate how their feedback will be considered
+- After addressing their feedback, ask if they would like to share an idea, express a concern, or end the conversation
 
 Always maintain a supportive and constructive tone, even when receiving negative feedback. Your goal is to make students feel heard while fostering a positive school community.`,
 
@@ -77,48 +86,71 @@ Remember:
 - Do not help with homework assignments or tests`
 };
 
-// Simulated responses based on prompt patterns
-const getSimulatedResponse = (prompt: string, type: ConversationType): string => {
+// Simulated responses based on prompt patterns and conversation history
+const getSimulatedResponse = (
+  prompt: string, 
+  type: ConversationType, 
+  messages: MessageType[] = [],
+  stage: ConversationStage = 'initial'
+): string => {
   // Convert prompt to lowercase for easier matching
   const lowerPrompt = prompt.toLowerCase();
   
   // Responses for idea sharing
   if (type === 'idea') {
-    if (lowerPrompt.includes('club') || lowerPrompt.includes('organization')) {
-      return "That's an interesting idea for a club! Based on our school's guidelines, you would need at least 5 members and a faculty advisor to start a new student organization. I can help you draft a proposal if you'd like to proceed with this.\n\n**Title/Name of the Idea:**\nStudent Club Initiative\n\n**Explanation:**\nA new student-led club focusing on your interests. This would be available to students in grades 9-12, providing opportunities for skill development, social connection, and leadership experience.\n\n**Objective:**\nTo create a structured environment for students to explore shared interests while developing organizational and teamwork skills.\n\n**Process:**\n1. Gather at least 5 interested students\n2. Approach Mr. Johnson, the Student Activities Coordinator, to discuss your club idea\n3. Draft a formal proposal including meeting times, space requirements, and activities\n4. Submit your proposal to the Student Council for review\n5. Once approved, schedule an initial meeting in the Student Commons area";
+    // If this is a new idea conversation or we're in the ongoing stage without a proposal yet
+    if (stage === 'initial' || (stage === 'ongoing' && !messages.some(m => !m.isUser && m.text.includes("**Title/Name of the Idea:**")))) {
+      // Generate a full proposal form
+      return generateProposalForm(prompt);
+    } 
+    // If we already have a proposal and the user is making changes
+    else if (stage === 'ongoing') {
+      // Find the latest proposal form in the messages
+      const lastProposal = [...messages]
+        .reverse()
+        .find(m => !m.isUser && m.text.includes("**Title/Name of the Idea:**"));
+      
+      if (lastProposal) {
+        // Update the proposal based on user's changes
+        return updateProposalForm(lastProposal.text, prompt);
+      } else {
+        // Fallback if we can't find the previous proposal
+        return generateProposalForm(prompt);
+      }
     }
     
-    if (lowerPrompt.includes('event') || lowerPrompt.includes('activity')) {
-      return "Your event idea sounds promising! The school calendar has some openings next month. You'll need to fill out a facility request form and get approval from the activities director.\n\n**Title/Name of the Idea:**\nStudent Event Proposal\n\n**Explanation:**\nA school event designed to engage students across multiple grade levels. This activity would provide entertainment, community building, and potentially raise awareness or funds for school initiatives.\n\n**Objective:**\nTo create a memorable experience that fosters school spirit and student engagement outside the classroom.\n\n**Process:**\n1. Complete the Event Proposal Form available from Ms. Williams in the Student Affairs office\n2. Select potential dates by checking the school calendar for availability\n3. Reserve necessary spaces through the Facilities Department (Mr. Garcia)\n4. Arrange for required equipment and materials at least two weeks in advance\n5. Recruit student volunteers and faculty supervisors\n6. Promote the event through morning announcements and approved poster locations";
-    }
-    
-    return "Thank you for sharing your idea! It sounds like something that could benefit our school community.\n\n**Title/Name of the Idea:**\nStudent Initiative Proposal\n\n**Explanation:**\nA new initiative to enhance the student experience at our school. This would benefit students across multiple grade levels by providing additional opportunities for growth and engagement.\n\n**Objective:**\nTo address an identified need within our school community and implement a solution that improves student life.\n\n**Process:**\n1. Refine your concept with input from peers and a faculty mentor\n2. Schedule a meeting with Mr. Peterson, the Student Life Coordinator, to discuss feasibility\n3. Develop a detailed implementation timeline and resource requirements\n4. Present your proposal to the Student Council during their monthly review session\n5. Upon approval, begin implementation with regular progress updates to your faculty advisor";
+    return generateProposalForm(prompt);
   }
   
   // Responses for feedback
   if (type === 'feedback') {
     if (lowerPrompt.includes('teacher') || lowerPrompt.includes('class')) {
-      return "I appreciate you sharing your thoughts about the class. Your feedback is valuable for improving the learning experience. Have you tried discussing your concerns directly with your teacher during office hours? They might be able to provide additional support or clarify their teaching approach.";
+      return "I appreciate you sharing your thoughts about the class. Your feedback is valuable for improving the learning experience. We'll make sure your comments reach the academic team for consideration. Would you like to share an idea, express a concern, or end our conversation now?";
     }
     
     if (lowerPrompt.includes('cafeteria') || lowerPrompt.includes('food')) {
-      return "Thank you for your feedback about the cafeteria. The nutrition services team is always looking to improve. I'll make sure your comments are forwarded to them. In the meantime, did you know that students can join the cafeteria advisory committee to have direct input on menu planning?";
+      return "Thank you for your feedback about the cafeteria. The nutrition services team is always looking to improve, and your input is valuable. I'll make sure your comments are forwarded to them. Would you like to share an idea, express a concern, or shall we end our chat?";
     }
     
-    return "I appreciate your feedback! Your input helps make our school better. I've noted your comments and will share them with the appropriate department. If you have any specific suggestions for improvement, please feel free to share those as well.";
+    return "I appreciate your feedback! Your input helps make our school better. I've noted your comments and will share them with the appropriate department. Is there anything else you'd like to discuss today, perhaps an idea you'd like to share or a concern to express?";
   }
   
   // Responses for concerns
   if (type === 'concern') {
     if (lowerPrompt.includes('stress') || lowerPrompt.includes('anxiety')) {
-      return "School can be overwhelming at times, and your feelings of stress are completely valid. Remember that taking care of your wellbeing is just as important as academics. Our school counselor, Ms. Martinez, has an open-door policy every Tuesday and Thursday during lunch. Small steps like deep breathing or talking with friends can make a big difference too.";
+      return "School can be overwhelming at times, and your feelings of stress are completely valid. Remember that taking care of your wellbeing is just as important as academics. Our school counselor, Ms. Martinez, has an open-door policy every Tuesday and Thursday during lunch. Is there something specific that's causing this stress that you'd like to talk more about?";
     }
     
     if (lowerPrompt.includes('bully') || lowerPrompt.includes('harassment')) {
-      return "I'm truly sorry you're experiencing this. Everyone deserves to feel safe at school. Your courage in speaking up is commendable. Please talk to Mr. Thompson, our vice principal, who handles these matters with strict confidentiality. You can also report incidents through the anonymous box outside the counseling office. Remember, this isn't your fault, and help is available.";
+      return "I'm truly sorry you're experiencing this. Everyone deserves to feel safe at school. Your courage in speaking up is commendable. Please talk to Mr. Thompson, our vice principal, who handles these matters with strict confidentiality. Would you like to discuss this further, or would you prefer to move on to another topic?";
     }
     
-    return "Thank you for sharing your concern with me. It's important that you feel heard and supported. While I can provide general guidance, remember that the school counselors and teachers are available to help with any specific challenges you're facing. Your feelings matter, and reaching out is a brave first step toward finding solutions.";
+    // Check if user seems satisfied and might want to move on
+    if (lowerPrompt.includes('thank you') || lowerPrompt.includes('helped') || lowerPrompt.includes('better now')) {
+      return "I'm glad I could be of help. Your wellbeing is important to us. Would you like to share an idea for the school, provide some feedback, or is there anything else on your mind?";
+    }
+    
+    return "Thank you for sharing your concern with me. It's important that you feel heard and supported. While I can provide general guidance, remember that the school counselors and teachers are available to help with any specific challenges you're facing. Is there anything else about this concern you'd like to discuss?";
   }
   
   // General responses
@@ -127,22 +159,137 @@ const getSimulatedResponse = (prompt: string, type: ConversationType): string =>
   }
   
   if (lowerPrompt.includes('thank')) {
-    return "You're welcome! I'm here to help anytime you need assistance.";
+    return "You're welcome! I'm here to help anytime you need assistance. Would you like to share an idea, provide feedback, or express another concern?";
   }
   
   if (lowerPrompt.includes('school hours') || lowerPrompt.includes('schedule')) {
-    return "Our school hours are from 8:00 AM to 3:15 PM, Monday through Friday. The main office is open from 7:30 AM to 4:00 PM if you need to speak with staff.";
+    return "Our school hours are from 8:00 AM to 3:15 PM, Monday through Friday. The main office is open from 7:30 AM to 4:00 PM if you need to speak with staff. Is there something specific about the schedule you'd like to know?";
   }
   
   // Default response
   return "I appreciate your message. Is there something specific about your school experience that you'd like to discuss or get information about? I'm here to help with ideas, feedback, or concerns.";
 };
 
+const generateProposalForm = (prompt: string): string => {
+  // Generate a proposal form based on the user's idea
+  if (prompt.toLowerCase().includes('club') || prompt.toLowerCase().includes('society')) {
+    return "**Title/Name of the Idea:**\nStudent Club Initiative - " + prompt.split(' ').slice(0, 3).join(' ') + "\n\n" +
+           "**Explanation:**\nA new student-led club focusing on " + prompt.toLowerCase().replace('club', '').replace('society', '') + 
+           ". This would be available to students in grades 9-12, providing opportunities for skill development, social connection, and leadership experience.\n\n" +
+           "**Objective:**\nTo create a structured environment for students to explore shared interests while developing organizational and teamwork skills. " +
+           "This club addresses the need for more extracurricular activities that connect students with similar interests.\n\n" +
+           "**Process:**\n1. Gather at least 5 interested students\n" +
+           "2. Approach Mr. Johnson, the Student Activities Coordinator, to discuss your club idea\n" +
+           "3. Draft a formal proposal including meeting times, space requirements, and activities\n" +
+           "4. Submit your proposal to the Student Council for review\n" +
+           "5. Once approved, schedule an initial meeting in the Student Commons area\n" +
+           "6. Design posters for the club fair with the help of Ms. Williams from the Arts Department\n" +
+           "7. Recruit members during club week in September";
+  }
+  
+  if (prompt.toLowerCase().includes('event') || prompt.toLowerCase().includes('activity')) {
+    return "**Title/Name of the Idea:**\nStudent Event - " + prompt.split(' ').slice(0, 3).join(' ') + "\n\n" +
+           "**Explanation:**\nA school event designed to engage students across multiple grade levels. " +
+           "This activity would provide entertainment, community building, and potentially raise awareness or funds for school initiatives. " +
+           "It would be available to students in grades " + (Math.floor(Math.random() * 3) + 9) + "-12.\n\n" +
+           "**Objective:**\nTo create a memorable experience that fosters school spirit and student engagement outside the classroom. " +
+           "This event addresses the need for more community-building activities and opportunities for creative expression.\n\n" +
+           "**Process:**\n1. Complete the Event Proposal Form available from Ms. Williams in the Student Affairs office\n" +
+           "2. Select potential dates by checking the school calendar for availability\n" +
+           "3. Reserve necessary spaces through the Facilities Department (Mr. Garcia)\n" +
+           "4. Arrange for required equipment and materials at least two weeks in advance\n" +
+           "5. Recruit student volunteers and faculty supervisors\n" +
+           "6. Promote the event through morning announcements and approved poster locations\n" +
+           "7. Set up a budget proposal for any necessary funds with help from Ms. Johnson in Accounting";
+  }
+  
+  // Default proposal
+  return "**Title/Name of the Idea:**\n" + prompt.split(' ').slice(0, 4).join(' ') + "\n\n" +
+         "**Explanation:**\nA new initiative to enhance the student experience at our school. This would benefit students across multiple grade levels " +
+         "by providing additional opportunities for growth and engagement. It focuses on " + prompt.toLowerCase() + " which will help students develop important skills.\n\n" +
+         "**Objective:**\nTo address an identified need within our school community and implement a solution that improves student life. " +
+         "This initiative aims to solve the problem of " + (prompt.includes('lack') ? prompt : "limited opportunities for " + prompt.toLowerCase()) + ".\n\n" +
+         "**Process:**\n1. Refine your concept with input from peers and a faculty mentor\n" +
+         "2. Schedule a meeting with Mr. Peterson, the Student Life Coordinator, to discuss feasibility\n" +
+         "3. Develop a detailed implementation timeline and resource requirements\n" +
+         "4. Present your proposal to the Student Council during their monthly review session\n" +
+         "5. Upon approval, begin implementation with regular progress updates to your faculty advisor\n" +
+         "6. Gather feedback from participants to make improvements\n" +
+         "7. Prepare a summary report for school administration";
+};
+
+const updateProposalForm = (previousProposal: string, userChanges: string): string => {
+  // This function would update the proposal based on user's feedback
+  // For simulation, we'll make some simple changes based on keywords
+  
+  let updatedProposal = previousProposal;
+  
+  // Extract the sections
+  const titleMatch = previousProposal.match(/\*\*Title\/Name of the Idea:\*\*(.*?)(?=\*\*Explanation)/s);
+  const explanationMatch = previousProposal.match(/\*\*Explanation:\*\*(.*?)(?=\*\*Objective)/s);
+  const objectiveMatch = previousProposal.match(/\*\*Objective:\*\*(.*?)(?=\*\*Process)/s);
+  const processMatch = previousProposal.match(/\*\*Process:\*\*(.*?)$/s);
+  
+  // Apply changes based on user feedback
+  if (userChanges.toLowerCase().includes('title')) {
+    // User wants to change the title
+    const newTitleParts = userChanges.split(' ').slice(userChanges.toLowerCase().indexOf('title') + 1);
+    if (newTitleParts.length > 2 && titleMatch) {
+      const newTitle = newTitleParts.join(' ').replace(/[.,:;]/g, '');
+      updatedProposal = updatedProposal.replace(titleMatch[0], "**Title/Name of the Idea:**\n" + newTitle + "\n\n**Explanation:");
+    }
+  }
+  
+  if (userChanges.toLowerCase().includes('grade') || userChanges.toLowerCase().includes('year')) {
+    // User wants to change grade levels
+    if (explanationMatch) {
+      let newExplanation = explanationMatch[1];
+      if (userChanges.match(/grade[s]? (\d+)-(\d+)/i)) {
+        const gradeMatch = userChanges.match(/grade[s]? (\d+)-(\d+)/i);
+        if (gradeMatch) {
+          newExplanation = newExplanation.replace(/grade[s]? \d+-\d+/i, "grades " + gradeMatch[1] + "-" + gradeMatch[2]);
+        }
+      }
+      updatedProposal = updatedProposal.replace(explanationMatch[0], "**Explanation:**" + newExplanation + "**Objective:");
+    }
+  }
+  
+  if (userChanges.toLowerCase().includes('objective') || userChanges.toLowerCase().includes('problem')) {
+    // User wants to change the objective
+    if (objectiveMatch && userChanges.length > 20) {
+      const objectiveStartIdx = userChanges.toLowerCase().indexOf('objective');
+      const problemStartIdx = userChanges.toLowerCase().indexOf('problem');
+      const startIdx = objectiveStartIdx > -1 ? objectiveStartIdx : (problemStartIdx > -1 ? problemStartIdx : 0);
+      const newObjectivePart = userChanges.substring(startIdx);
+      updatedProposal = updatedProposal.replace(objectiveMatch[0], "**Objective:**\nTo address " + newObjectivePart + "\n\n**Process:");
+    }
+  }
+  
+  if (userChanges.toLowerCase().includes('process') || userChanges.toLowerCase().includes('step')) {
+    // User wants to change the process
+    if (processMatch && userChanges.length > 20) {
+      // Simply append a new step for simulation
+      const steps = processMatch[1].split('\n');
+      const lastStepNumber = parseInt(steps[steps.length - 2]?.match(/^\d+/)?.[0] || "0");
+      
+      if (lastStepNumber) {
+        const newStep = (lastStepNumber + 1) + ". " + userChanges.split(' ').slice(3).join(' ');
+        const newProcess = processMatch[1].trim() + "\n" + newStep;
+        updatedProposal = updatedProposal.replace(processMatch[0], "**Process:**\n" + newProcess);
+      }
+    }
+  }
+  
+  return updatedProposal;
+};
+
 export const getChatResponse = async (
   prompt: string, 
-  type: ConversationType = 'general'
+  type: ConversationType = 'general',
+  messages: MessageType[] = [],
+  stage: ConversationStage = 'initial'
 ): Promise<string> => {
-  console.log(`Processing prompt for ${type} conversation: ${prompt}`);
+  console.log(`Processing prompt for ${type} conversation at stage ${stage}: ${prompt}`);
   console.log(`Using system prompt for ${type}:`, systemPrompts[type].substring(0, 100) + '...');
   
   // Simulate API delay
@@ -150,16 +297,81 @@ export const getChatResponse = async (
   
   // In a real implementation, this would call the Mistral API
   // For demo purposes, we use simulated responses
-  return getSimulatedResponse(prompt, type);
+  return getSimulatedResponse(prompt, type, messages, stage);
+};
+
+// Simulated proposal submission function
+export const submitProposal = async (proposal: string): Promise<void> => {
+  console.log("Submitting proposal to server:", proposal);
+  
+  // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // In a real implementation, this would send the proposal to the server
+  // For now, we just log it to the console
+  
+  // Sample HTTP request that would be implemented
+  /*
+  try {
+    const response = await fetch('https://your-supabase-url/rest/v1/proposals', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': 'your-supabase-api-key',
+        'Authorization': 'Bearer your-supabase-api-key'
+      },
+      body: JSON.stringify({
+        proposal_text: proposal,
+        submitted_at: new Date().toISOString(),
+        status: 'pending'
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to submit proposal');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error submitting proposal:', error);
+    throw error;
+  }
+  */
+  
+  return Promise.resolve();
 };
 
 // In a real implementation, this would be the actual Mistral API call
 /*
 export const getChatResponse = async (
   prompt: string,
-  type: ConversationType = 'general'
+  type: ConversationType = 'general',
+  messages: MessageType[] = [],
+  stage: ConversationStage = 'initial'
 ): Promise<string> => {
   try {
+    // Prepare message history for context
+    const messageHistory = messages
+      .filter(m => m.id !== '1' && m.id !== '2') // Filter out initial greeting messages
+      .slice(-10) // Take only the last 10 messages for context
+      .map(m => ({
+        role: m.isUser ? 'user' : 'assistant',
+        content: m.text
+      }));
+    
+    // Add system message and current user prompt
+    const apiMessages = [
+      {
+        role: 'system',
+        content: systemPrompts[type]
+      },
+      ...messageHistory,
+      {
+        role: 'user',
+        content: prompt
+      }
+    ];
+    
     const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -168,16 +380,7 @@ export const getChatResponse = async (
       },
       body: JSON.stringify({
         model: 'mistral-large-latest',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompts[type]
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
+        messages: apiMessages,
         temperature: 0.7,
         max_tokens: 1000
       })
