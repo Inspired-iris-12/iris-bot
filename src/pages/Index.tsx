@@ -13,6 +13,11 @@ const Index = () => {
   useEffect(() => {
     // Check authentication status on mount
     setAuthenticated(isAuthenticated());
+    
+    // Log development credentials
+    console.log('Development account credentials:');
+    console.log('Email: dev@diyafahschool.com');
+    console.log('OTP: 123456');
   }, []);
 
   const handleAuthenticated = () => {

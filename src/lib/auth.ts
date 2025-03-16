@@ -3,6 +3,8 @@
 // In a real application, this would connect to a backend API
 
 const LOCAL_STORAGE_AUTH_KEY = 'inspired_auth_token';
+const DEV_EMAIL = 'dev@diyafahschool.com';
+const DEV_OTP = '123456';
 
 export const isAuthenticated = (): boolean => {
   const authToken = localStorage.getItem(LOCAL_STORAGE_AUTH_KEY);
@@ -10,6 +12,12 @@ export const isAuthenticated = (): boolean => {
 };
 
 export const sendOtp = async (email: string): Promise<boolean> => {
+  // Development bypass - automatically "send" OTP for development email
+  if (email === DEV_EMAIL) {
+    console.log(`Development mode: OTP for ${DEV_EMAIL} is ${DEV_OTP}`);
+    return true;
+  }
+  
   // Simulate API call to send OTP
   console.log(`OTP would be sent to ${email} in a real application`);
   
@@ -25,14 +33,25 @@ export const verifyOtp = async (
   otp: string, 
   rememberMe: boolean
 ): Promise<boolean> => {
+  // Development bypass - automatically verify the development email with the preset OTP
+  if (email === DEV_EMAIL && otp === DEV_OTP) {
+    console.log('Development authentication successful');
+    const mockToken = `dev_token_${Date.now()}`;
+    localStorage.setItem(LOCAL_STORAGE_AUTH_KEY, mockToken);
+    return true;
+  }
+  
   // Simulate API call to verify OTP
   console.log(`Verifying OTP: ${otp} for ${email}`);
   
   // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 2000));
   
-  // For demo purposes, we'll accept any 6-digit OTP
-  const isValid = otp.length === 6 && /^\d+$/.test(otp);
+  // Verify email domain and OTP format
+  const isValidEmail = email.endsWith('@diyafahschool.com');
+  const isValidOtp = otp.length === 6 && /^\d+$/.test(otp);
+  
+  const isValid = isValidEmail && isValidOtp;
   
   if (isValid) {
     // Store authentication token

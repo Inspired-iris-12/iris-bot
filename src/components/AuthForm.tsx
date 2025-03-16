@@ -20,10 +20,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email.trim() || !email.includes('@') || !email.endsWith('.edu')) {
+    if (!email.trim() || !email.includes('@') || !email.endsWith('@diyafahschool.com')) {
       toast({
         title: "Invalid email",
-        description: "Please enter a valid school email address",
+        description: "Please enter a valid school email ending with @diyafahschool.com",
         variant: "destructive"
       });
       return;
@@ -128,7 +128,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="youremail@school.edu"
+                placeholder="youremail@diyafahschool.com"
                 className="form-input pl-10"
                 required
               />
