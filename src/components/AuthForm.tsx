@@ -1,10 +1,10 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { sendOtp, verifyOtp } from '../lib/auth';
+import { FetchOtp, VerifyOtp } from '@/api';  // Import the functions from api.ts
 import OTPInput from './OTPInput';
 import { toast } from '@/hooks/use-toast';
 import { AtSign } from 'lucide-react';
+import { OtpResponse } from "@/interfaces/types";
 
 interface AuthFormProps {
   onAuthenticated: () => void;
@@ -17,9 +17,34 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
+  // Check for stored authentication on component mount
+  useEffect(() => {
+    const storedAuth = localStorage.getItem('authData');
+    if (storedAuth) {
+      try {
+        const authData = JSON.parse(storedAuth);
+        // Check if the stored auth data is still valid
+        // You might want to add token validation or expiry check here
+        if (authData.email) {
+          setEmail(authData.email);
+          // Automatically authenticate the user
+          onAuthenticated();
+          toast({
+            title: "Welcome back!",
+            description: `You are signed in as ${authData.email}`,
+          });
+        }
+      } catch (error) {
+        // If there's an error parsing the stored data, clear it
+        localStorage.removeItem('authData');
+      }
+    }
+  }, [onAuthenticated]);
+
+  // Handle sending OTP to the user's email
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!email.trim() || !email.includes('@') || !email.endsWith('@diyafahschool.com')) {
       toast({
         title: "Invalid email",
@@ -28,10 +53,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
       });
       return;
     }
-    
+
     try {
       setIsLoading(true);
-      await sendOtp(email);
+      await FetchOtp(email);  // Call the API to send OTP
       setOtpSent(true);
       toast({
         title: "OTP Sent",
@@ -48,9 +73,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
     }
   };
 
+  // Handle OTP verification after the user enters it
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+  
     if (otp.length !== 6) {
       toast({
         title: "Invalid OTP",
@@ -59,17 +85,28 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
       });
       return;
     }
-    
+  
     try {
       setIsLoading(true);
-      const success = await verifyOtp(email, otp, rememberMe);
-      
-      if (success) {
+      const response = await VerifyOtp(email, otp);  // Now response has the OtpResponse type
+  
+      if (response.message === "OTP verified successfully") {
+        // Store authentication data if "Remember me" is checked
+        if (rememberMe) {
+          const authData = {
+            email: email,
+            timestamp: new Date().toISOString(),
+            // You might want to store tokens or other auth data here
+            // token: response.token, // if your API returns a token
+          };
+          localStorage.setItem('authData', JSON.stringify(authData));
+        }
+        
         toast({
           title: "Authenticated successfully",
           description: "Welcome to InspirED to Speak!",
         });
-        onAuthenticated();
+        onAuthenticated();  // User is authenticated, call the callback
       } else {
         toast({
           title: "Invalid OTP",
@@ -86,6 +123,19 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  // Function to handle sign out
+  const handleSignOut = () => {
+    localStorage.removeItem('authData');
+    setEmail('');
+    setOtp('');
+    setOtpSent(false);
+    setRememberMe(false);
+    toast({
+      title: "Signed out",
+      description: "You have been signed out successfully",
+    });
   };
 
   const formVariants = {

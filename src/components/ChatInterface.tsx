@@ -1,11 +1,11 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, ArrowLeft, Sparkles, MessageSquare, Heart } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ActionButton from './ActionButton';
 import { useToast } from '@/hooks/use-toast';
-import { getChatResponse, submitProposal } from '../lib/ai';
+import { submitIdea, submitConcern, submitFeedback, checkIdea, checkConcern } from '../api';
+import { IdeaCheckResponse, ConcernCheckResponse, ApiResponse } from '@/interfaces/types';
 
 type MessageType = {
   id: string;
@@ -13,6 +13,7 @@ type MessageType = {
   isUser: boolean;
   timestamp: Date;
 };
+
 
 type ConversationType = 'idea' | 'feedback' | 'concern' | 'general';
 type ConversationStage = 'initial' | 'ongoing' | 'confirmation' | 'completed';
@@ -75,109 +76,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     setIsLoading(true);
     
     try {
-      // For idea conversation type in confirmation stage, handle differently
-      if (conversationType === 'idea' && conversationStage === 'confirmation') {
-        if (inputText.toLowerCase().includes('yes') || inputText.toLowerCase().includes('confirm') || inputText.toLowerCase().includes('submit')) {
-          // Submit the proposal to the server
-          await submitProposal(currentProposal);
-          
-          const confirmationMessage: MessageType = {
-            id: Date.now().toString(),
-            text: "Your proposal has been submitted successfully! Would you like to share another idea, express a concern, give feedback, or end our conversation?",
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, confirmationMessage]);
-          setConversationStage('completed');
-          setCurrentProposal('');
-        } else {
-          // User doesn't want to submit yet, go back to ongoing stage
-          const responseMessage: MessageType = {
-            id: Date.now().toString(),
-            text: "No problem. You can continue refining your proposal. What changes would you like to make?",
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, responseMessage]);
-          setConversationStage('ongoing');
-        }
+      // Handle based on conversation type and stage
+      if (conversationType === 'idea') {
+        await handleIdeaConversation(inputText);
+      } else if (conversationType === 'concern') {
+        await handleConcernConversation(inputText);
+      } else if (conversationType === 'feedback') {
+        await handleFeedbackConversation(inputText);
       } else {
-        // Normal message flow
-        const response = await getChatResponse(inputText, conversationType, messages, conversationStage);
-        
-        // Check if the response contains a proposal form for idea type
-        if (conversationType === 'idea' && response.includes('**Title/Name of the Idea:**')) {
-          setCurrentProposal(response);
-          
-          if (conversationStage === 'initial' || conversationStage === 'ongoing') {
-            // After generating a proposal, ask if they want to submit it
-            const followUpMessage = "Are you satisfied with this proposal? Would you like to submit it, or would you like to make changes?";
-            
-            const aiMessage: MessageType = {
-              id: (Date.now() + 1).toString(),
-              text: response + "\n\n" + followUpMessage,
-              isUser: false,
-              timestamp: new Date()
-            };
-            
-            setMessages(prev => [...prev, aiMessage]);
-            setConversationStage('ongoing');
-          }
-        } 
-        // For idea type that already has a proposal and user made changes
-        else if (conversationType === 'idea' && conversationStage === 'ongoing' && currentProposal) {
-          const aiMessage: MessageType = {
-            id: (Date.now() + 1).toString(),
-            text: response,
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-          
-          // Update the current proposal
-          setCurrentProposal(response);
-          
-          // Ask for confirmation
-          const confirmationMessage: MessageType = {
-            id: (Date.now() + 2).toString(),
-            text: "Are you ready to submit this proposal now? Please confirm.",
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, confirmationMessage]);
-          setConversationStage('confirmation');
-        }
-        // For concern or feedback, check if user wants to continue or do something else
-        else if ((conversationType === 'concern' || conversationType === 'feedback') && 
-                 (response.includes("Would you like to share an idea") || 
-                  response.includes("end our conversation"))) {
-          const aiMessage: MessageType = {
-            id: (Date.now() + 1).toString(),
-            text: response,
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-          // The response already contains the prompt for next steps
-        }
-        // Regular response
-        else {
-          const aiMessage: MessageType = {
-            id: (Date.now() + 1).toString(),
-            text: response,
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-        }
-        
-        // Check for specific phrases that indicate the user wants to change conversation type
+        // General conversation - check for type changes
         checkForConversationTypeChange(inputText.toLowerCase());
       }
     } catch (error) {
@@ -191,16 +98,217 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     }
   };
 
+  const handleIdeaConversation = async (input: string) => {
+    if (conversationStage === 'initial') {
+      // First submission of an idea
+      try {
+        const response = await submitIdea(input) as ApiResponse;
+        console.log('hi',response)
+        const aiMessage: MessageType = {
+          id: Date.now().toString(),
+          text: response.text,
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        setCurrentProposal(response.text);
+        setConversationStage('ongoing');
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to process your idea. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } else if (conversationStage === 'ongoing') {
+      // User has given feedback on the proposal
+      try {
+        // First check if user is satisfied with the proposal
+        const checkResponse = await checkIdea(input) as IdeaCheckResponse;
+        
+        if (checkResponse.approved) {
+          // User is satisfied, ask for final confirmation
+          const confirmationMessage: MessageType = {
+            id: Date.now().toString(),
+            text: "Are you ready to submit this proposal? Please confirm with 'yes' or 'no'.",
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, confirmationMessage]);
+          setConversationStage('confirmation');
+        } else {
+          // User wants changes, submit to idea API again
+          const response = await submitIdea(input) as ApiResponse;
+          
+          const aiMessage: MessageType = {
+            id: Date.now().toString(),
+            text: response.text,
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, aiMessage]);
+          setCurrentProposal(response.text);
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to process your feedback. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } else if (conversationStage === 'confirmation') {
+      // Final confirmation
+      if (input.toLowerCase().includes('yes') || input.toLowerCase() === 'yes') {
+        const thankYouMessage: MessageType = {
+          id: Date.now().toString(),
+          text: "Thank you! Your idea has been submitted successfully. Would you like to share another idea, express a concern, give feedback, or end our conversation?",
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, thankYouMessage]);
+        setConversationStage('completed');
+        setCurrentProposal('');
+        setShowActions(true);
+        setConversationType('general');
+      } else {
+        // Go back to ongoing stage
+        const editMessage: MessageType = {
+          id: Date.now().toString(),
+          text: "No problem. You can continue refining your idea. What changes would you like to make?",
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, editMessage]);
+        setConversationStage('ongoing');
+      }
+    } else if (conversationStage === 'completed') {
+      // Check if user wants to do something else
+      checkForConversationTypeChange(input.toLowerCase());
+    }
+  };
+
+  const handleConcernConversation = async (input: string) => {
+    if (conversationStage === 'initial') {
+      // First submission of a concern
+      try {
+        const response = await submitConcern(input) as ApiResponse;
+        
+        const aiMessage: MessageType = {
+          id: Date.now().toString(),
+          text: response.text,
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        setConversationStage('ongoing');
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to process your concern. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } else if (conversationStage === 'ongoing') {
+      // User has responded to the initial concern handling
+      try {
+        // Check if user is satisfied with the response
+        const checkResponse = await checkConcern(input) as ConcernCheckResponse;
+        
+        if (checkResponse.resolved) {
+          // Concern is resolved, ask if they want to do something else
+          const resolvedMessage: MessageType = {
+            id: Date.now().toString(),
+            text: "I'm glad we could address your concern. Would you like to share an idea, express another concern, give feedback, or end our conversation?",
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, resolvedMessage]);
+          setConversationStage('completed');
+          setShowActions(true);
+          setConversationType('general');
+        } else {
+          // Concern needs more handling, submit to concern API again
+          const response = await submitConcern(input) as ApiResponse;
+          
+          const aiMessage: MessageType = {
+            id: Date.now().toString(),
+            text: response.text,
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, aiMessage]);
+        }
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to process your response. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } else if (conversationStage === 'completed') {
+      // Check if user wants to do something else
+      checkForConversationTypeChange(input.toLowerCase());
+    }
+  };
+
+  const handleFeedbackConversation = async (input: string) => {
+    if (conversationStage === 'initial') {
+      // Submit feedback
+      try {
+        const response = await submitFeedback(input) as ApiResponse;
+        
+        const aiMessage: MessageType = {
+          id: Date.now().toString(),
+          text: response.text + "\n\nThank you for your feedback! Would you like to share an idea, express a concern, give more feedback, or end our conversation?",
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, aiMessage]);
+        setConversationStage('completed');
+        setShowActions(true);
+        setConversationType('general');
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to process your feedback. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } else if (conversationStage === 'completed') {
+      // Check if user wants to do something else
+      checkForConversationTypeChange(input.toLowerCase());
+    }
+  };
+
   const checkForConversationTypeChange = (text: string) => {
     // Check if the user wants to start a different type of conversation
-    if (text.includes('share an idea') || text.includes('have an idea')) {
+    if (text.includes('share an idea') || text.includes('have an idea') || text.includes('another idea')) {
       startNewConversation('idea');
-    } else if (text.includes('express a concern') || text.includes('have a concern')) {
+    } else if (text.includes('express a concern') || text.includes('have a concern') || text.includes('another concern')) {
       startNewConversation('concern');
-    } else if (text.includes('give feedback') || text.includes('provide feedback')) {
+    } else if (text.includes('give feedback') || text.includes('provide feedback') || text.includes('more feedback')) {
       startNewConversation('feedback');
     } else if (text.includes('end conversation') || text.includes('end chat') || text.includes('goodbye')) {
       handleBack();
+    } else {
+      // If no specific action is detected, provide guidance
+      const helpMessage: MessageType = {
+        id: Date.now().toString(),
+        text: "Would you like to share an idea, express a concern, give feedback, or end our conversation?",
+        isUser: false,
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, helpMessage]);
     }
   };
 
@@ -214,7 +322,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     
     switch(type) {
       case 'idea':
-        greeting = "That's great! I'd love to hear your idea. Please provide a brief description, and I'll help you develop a complete proposal form.";
+        greeting = "That's great! I'd love to hear your idea. Please provide a brief description of your idea.";
         break;
       case 'feedback':
         greeting = "Thank you for wanting to provide feedback. What would you like to share about your experience?";
@@ -346,32 +454,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       </div>
       
       {/* Input Area */}
-      {!showActions && (
-        <div className="bg-white p-4 border-t border-border">
-          <div className="max-w-3xl mx-auto flex">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Type your response here..."
-              className="flex-1 py-3 px-4 rounded-l-xl border border-r-0 border-border focus:outline-none focus:ring-2 focus:ring-inspired/30"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleSendMessage();
-                }
-              }}
-              disabled={isLoading}
-            />
-            <button
-              onClick={handleSendMessage}
-              disabled={isLoading || !inputText.trim()}
-              className="bg-inspired hover:bg-inspired-dark disabled:bg-inspired/50 disabled:cursor-not-allowed text-white px-4 rounded-r-xl transition-colors"
-            >
-              <Send size={20} />
-            </button>
-          </div>
+      <div className="bg-white p-4 border-t border-border">
+        <div className="max-w-3xl mx-auto flex">
+          <input
+            type="text"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            placeholder="Type your response here..."
+            className="flex-1 py-3 px-4 rounded-l-xl border border-r-0 border-border focus:outline-none focus:ring-2 focus:ring-inspired/30"
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleSendMessage();
+              }
+            }}
+            disabled={isLoading || showActions}
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={isLoading || !inputText.trim() || showActions}
+            className="bg-inspired hover:bg-inspired-dark disabled:bg-inspired/50 disabled:cursor-not-allowed text-white px-4 rounded-r-xl transition-colors"
+          >
+            <Send size={20} />
+          </button>
         </div>
-      )}
+      </div>
     </motion.div>
   );
 };
