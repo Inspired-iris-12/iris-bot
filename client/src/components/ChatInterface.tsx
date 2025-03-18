@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, ArrowLeft, Sparkles, MessageSquare, Heart } from 'lucide-react';
 import ChatMessage from './ChatMessage';
 import ActionButton from './ActionButton';
+import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
-import { submitIdea, submitConcern, submitFeedback, checkIdea, checkConcern } from '../api';
+import { submitIdea, submitConcern, submitFeedback, checkIdea, checkConcern, shareIdea } from '../api';
 import { IdeaCheckResponse, ConcernCheckResponse, ApiResponse } from '@/interfaces/types';
 
 type MessageType = {
@@ -15,7 +16,7 @@ type MessageType = {
 };
 
 
-type ConversationType = 'idea' | 'feedback' | 'concern' | 'general';
+type ConversationType = 'idea' | 'feedback' | 'concern' | 'general' | 'ended';
 type ConversationStage = 'initial' | 'ongoing' | 'confirmation' | 'completed';
 
 interface ChatInterfaceProps {
@@ -25,7 +26,11 @@ interface ChatInterfaceProps {
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [inputText, setInputText] = useState('');
+  const [email, setEmail] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
+  const [isChatCompleted, setIsChatCompleted] = useState(false);
+  const [isConfirmed, setIsConfirmed] = useState(false);
   const [conversationType, setConversationType] = useState<ConversationType>('general');
   const [conversationStage, setConversationStage] = useState<ConversationStage>('initial');
   const [showActions, setShowActions] = useState(true);
@@ -36,6 +41,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
+
+  useEffect(() => {
+    const storedAuth = localStorage.getItem('authData');
+    if (storedAuth) {
+      try {
+        const authData = JSON.parse(storedAuth);
+        // Check if the stored auth data is still valid
+        // You might want to add token validation or expiry check here
+        if (authData.email) {
+          setEmail(authData.email);
+          // Automatically authenticate the user
+        }
+      } catch (error) {
+        // If there's an error parsing the stored data, clear it
+        localStorage.removeItem('authData');
+      }
+    }
+  });
 
   useEffect(() => {
     scrollToBottom();
@@ -65,7 +89,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     if (!inputText.trim()) return;
     
     const userMessage: MessageType = {
-      id: Date.now().toString(),
+      id: uuidv4(),
       text: inputText,
       isUser: true,
       timestamp: new Date()
@@ -85,7 +109,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         await handleFeedbackConversation(inputText);
       } else {
         // General conversation - check for type changes
-        checkForConversationTypeChange(inputText.toLowerCase());
+        setIsChatCompleted(true);
       }
     } catch (error) {
       toast({
@@ -103,9 +127,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       // First submission of an idea
       try {
         const response = await submitIdea(input) as ApiResponse;
-        console.log('hi',response)
+        console.log('hi', response);
         const aiMessage: MessageType = {
-          id: Date.now().toString(),
+          id: uuidv4(),
           text: response.text,
           isUser: false,
           timestamp: new Date()
@@ -124,71 +148,57 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     } else if (conversationStage === 'ongoing') {
       // User has given feedback on the proposal
       try {
-        // First check if user is satisfied with the proposal
-        const checkResponse = await checkIdea(input) as IdeaCheckResponse;
-        
-        if (checkResponse.approved) {
-          // User is satisfied, ask for final confirmation
+        setIsLoading(true);
+    
+        // Step 1: Check if the idea is ready
+        const ideaCheckResponse = await checkIdea(input) as ApiResponse;
+        console.log('idea', ideaCheckResponse);
+        if (ideaCheckResponse?.text === "yes") {
+          // Move to confirmation stage
+          setConversationStage('confirmation');
+          
           const confirmationMessage: MessageType = {
-            id: Date.now().toString(),
-            text: "Are you ready to submit this proposal? Please confirm with 'yes' or 'no'.",
+            id: uuidv4(),
+            text: "Your idea is ready to be submitted. Would you like to proceed?",
             isUser: false,
             timestamp: new Date()
           };
           
           setMessages(prev => [...prev, confirmationMessage]);
-          setConversationStage('confirmation');
-        } else {
-          // User wants changes, submit to idea API again
-          const response = await submitIdea(input) as ApiResponse;
-          
-          const aiMessage: MessageType = {
-            id: Date.now().toString(),
-            text: response.text,
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-          setCurrentProposal(response.text);
+          setIsConfirmed(true);
+          return;
         }
+    
+        // Step 2: If not ready, continue refining the idea
+        const lastMessages = messages.slice(-10).map(m =>
+          `${m.isUser ? 'User' : 'AI'}: ${m.text}`
+        ).join("\n");
+    
+        const contextualInput = `Previous conversation:\n${lastMessages}\n\nNew user input:\n${input}`;
+    
+        const response = await submitIdea(contextualInput) as ApiResponse;
+    
+        const aiMessage: MessageType = {
+          id: uuidv4(),
+          text: response.text,
+          isUser: false,
+          timestamp: new Date()
+        };
+    
+        setMessages(prev => [...prev, aiMessage]);
+    
       } catch (error) {
         toast({
           title: "Error",
-          description: "Failed to process your feedback. Please try again.",
+          description: "Failed to process your response. Please try again.",
           variant: "destructive"
         });
-      }
-    } else if (conversationStage === 'confirmation') {
-      // Final confirmation
-      if (input.toLowerCase().includes('yes') || input.toLowerCase() === 'yes') {
-        const thankYouMessage: MessageType = {
-          id: Date.now().toString(),
-          text: "Thank you! Your idea has been submitted successfully. Would you like to share another idea, express a concern, give feedback, or end our conversation?",
-          isUser: false,
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, thankYouMessage]);
-        setConversationStage('completed');
-        setCurrentProposal('');
-        setShowActions(true);
-        setConversationType('general');
-      } else {
-        // Go back to ongoing stage
-        const editMessage: MessageType = {
-          id: Date.now().toString(),
-          text: "No problem. You can continue refining your idea. What changes would you like to make?",
-          isUser: false,
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, editMessage]);
-        setConversationStage('ongoing');
+      } finally {
+        setIsLoading(false);
       }
     } else if (conversationStage === 'completed') {
       // Check if user wants to do something else
-      checkForConversationTypeChange(input.toLowerCase());
+      setIsChatCompleted(true);
     }
   };
 
@@ -199,7 +209,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         const response = await submitConcern(input) as ApiResponse;
         
         const aiMessage: MessageType = {
-          id: Date.now().toString(),
+          id: uuidv4(),
           text: response.text,
           isUser: false,
           timestamp: new Date()
@@ -217,45 +227,39 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     } else if (conversationStage === 'ongoing') {
       // User has responded to the initial concern handling
       try {
-        // Check if user is satisfied with the response
-        const checkResponse = await checkConcern(input) as ConcernCheckResponse;
-        
-        if (checkResponse.resolved) {
-          // Concern is resolved, ask if they want to do something else
-          const resolvedMessage: MessageType = {
-            id: Date.now().toString(),
-            text: "I'm glad we could address your concern. Would you like to share an idea, express another concern, give feedback, or end our conversation?",
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, resolvedMessage]);
-          setConversationStage('completed');
-          setShowActions(true);
-          setConversationType('general');
-        } else {
-          // Concern needs more handling, submit to concern API again
-          const response = await submitConcern(input) as ApiResponse;
-          
-          const aiMessage: MessageType = {
-            id: Date.now().toString(),
-            text: response.text,
-            isUser: false,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-        }
+        setIsLoading(true);
+  
+        // Get last 10 messages as context (including both user and AI)
+        const lastMessages = messages.slice(-10).map(m => 
+          `${m.isUser ? 'User' : 'AI'}: ${m.text}`
+        ).join("\n");
+  
+        // Append user input with previous messages for context
+        const contextualInput = `Previous conversation:\n${lastMessages}\n\nNew user input:\n${input}`;
+  
+        const response = await submitConcern(contextualInput) as ApiResponse;
+  
+        const aiMessage: MessageType = {
+          id: uuidv4(),
+          text: response.text,
+          isUser: false,
+          timestamp: new Date()
+        };
+  
+        setMessages(prev => [...prev, aiMessage]);
+  
       } catch (error) {
         toast({
           title: "Error",
           description: "Failed to process your response. Please try again.",
           variant: "destructive"
         });
+      } finally {
+        setIsLoading(false);
       }
     } else if (conversationStage === 'completed') {
       // Check if user wants to do something else
-      checkForConversationTypeChange(input.toLowerCase());
+      setIsChatCompleted(true);
     }
   };
 
@@ -266,7 +270,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         const response = await submitFeedback(input) as ApiResponse;
         
         const aiMessage: MessageType = {
-          id: Date.now().toString(),
+          id: uuidv4(),
           text: response.text + "\n\nThank you for your feedback! Would you like to share an idea, express a concern, give more feedback, or end our conversation?",
           isUser: false,
           timestamp: new Date()
@@ -285,34 +289,72 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       }
     } else if (conversationStage === 'completed') {
       // Check if user wants to do something else
-      checkForConversationTypeChange(input.toLowerCase());
+      setIsChatCompleted(true);
     }
   };
 
-  const checkForConversationTypeChange = (text: string) => {
-    // Check if the user wants to start a different type of conversation
-    if (text.includes('share an idea') || text.includes('have an idea') || text.includes('another idea')) {
-      startNewConversation('idea');
-    } else if (text.includes('express a concern') || text.includes('have a concern') || text.includes('another concern')) {
-      startNewConversation('concern');
-    } else if (text.includes('give feedback') || text.includes('provide feedback') || text.includes('more feedback')) {
-      startNewConversation('feedback');
-    } else if (text.includes('end conversation') || text.includes('end chat') || text.includes('goodbye')) {
-      handleBack();
+  // Handle confirmation response for idea submission
+  const handleIdeaConfirmation = async (isConfirmed: boolean) => {
+    // First, add the user's choice as a message
+    const userMessage: MessageType = {
+      id: uuidv4(),
+      text: isConfirmed ? "Yes" : "No",
+      isUser: true,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    
+    if (isConfirmed) {
+      // User confirmed, submit the idea
+      setIsLoading(true);
+      try {
+        // Get the last AI message as the final idea
+        const lastAIMessage = messages.filter(m => !m.isUser).slice(-2)[0]?.text || '';
+        console.log(lastAIMessage)
+        if (lastAIMessage) {
+          console.log(email)
+          await shareIdea(lastAIMessage, email);
+        }
+        
+        // Thank user and show final options
+        const finalMessage: MessageType = {
+          id: uuidv4(),
+          text: "Thank you! Your idea has been submitted successfully. Would you like to share another idea, express a concern, give feedback, or end our conversation?",
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, finalMessage]);
+        setConversationStage('completed');
+        setIsChatCompleted(true);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to submit your idea. Please try again.",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoading(false);
+      }
     } else {
-      // If no specific action is detected, provide guidance
-      const helpMessage: MessageType = {
-        id: Date.now().toString(),
-        text: "Would you like to share an idea, express a concern, give feedback, or end our conversation?",
+      // User declined, go back to refining the idea
+      const declineMessage: MessageType = {
+        id: uuidv4(),
+        text: "No problem. Let's continue refining your idea. What would you like to change or add?",
         isUser: false,
         timestamp: new Date()
       };
       
-      setMessages(prev => [...prev, helpMessage]);
+      setMessages(prev => [...prev, declineMessage]);
+      setConversationStage('ongoing');
     }
+    
+    // Hide the confirmation buttons
+    setIsConfirmed(false);
   };
 
-  const startNewConversation = (type: ConversationType) => {
+  const startNewConversation = (type: ConversationType, option: string) => {
     setConversationType(type);
     setShowActions(false);
     setConversationStage('initial');
@@ -330,18 +372,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       case 'concern':
         greeting = "I'm here to listen and help with your concerns. What's troubling you?";
         break;
+      case 'ended':
+        greeting = "It was great chatting with you! If you have any other questions or concerns, or feedback plese come back";
+        break;
       default:
         greeting = "How can I help you today?";
     }
     
+    const userMessage: MessageType = {
+      id: uuidv4(),
+      text: option,
+      isUser: true,
+      timestamp: new Date()
+    };
+    
     const aiMessage: MessageType = {
-      id: Date.now().toString(),
+      id: uuidv4(),
       text: greeting,
       isUser: false,
       timestamp: new Date()
     };
     
-    setMessages(prev => [...prev, aiMessage]);
+    setMessages(prev => [...prev, userMessage, aiMessage]);
   };
 
   const handleBack = () => {
@@ -349,6 +401,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     setConversationType('general');
     setConversationStage('initial');
     setCurrentProposal('');
+    setIsConfirmed(false);
     
     // Clear previous conversation and start fresh
     setMessages([
@@ -419,15 +472,60 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
             >
               <ActionButton 
                 label="Share an idea" 
-                onClick={() => startNewConversation('idea')}
+                onClick={() => startNewConversation('idea', 'Share an Idea')}
               />
               <ActionButton 
                 label="Express a concern" 
-                onClick={() => startNewConversation('concern')}
+                onClick={() => startNewConversation('concern', 'Express a concern')}
               />
               <ActionButton 
                 label="Give feedback" 
-                onClick={() => startNewConversation('feedback')}
+                onClick={() => startNewConversation('feedback', 'Give feedback')}
+              />
+            </motion.div>
+          )}
+
+          {isChatCompleted && messages.length >= 2 && (
+            <motion.div 
+              className="flex flex-col space-y-3 mt-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.3 }}
+            >
+              <ActionButton 
+                label="Share an idea" 
+                onClick={() => startNewConversation('idea', 'Share an Idea')}
+              />
+              <ActionButton 
+                label="Express a concern" 
+                onClick={() => startNewConversation('concern', 'Express a concern')}
+              />
+              <ActionButton 
+                label="Give feedback" 
+                onClick={() => startNewConversation('feedback', 'Give feedback')}
+              />
+              <ActionButton 
+                label="End Conversation" 
+                onClick={() => startNewConversation('ended', "End Conversation")}
+              />
+            </motion.div>
+          )}
+
+          {/* Confirmation Buttons */}
+          {isConfirmed && (
+            <motion.div 
+              className="flex flex-col space-y-3 mt-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.3 }}
+            >
+              <ActionButton 
+                label="Yes" 
+                onClick={() => handleIdeaConfirmation(true)}
+              />
+              <ActionButton 
+                label="No" 
+                onClick={() => handleIdeaConfirmation(false)}
               />
             </motion.div>
           )}
@@ -467,11 +565,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
                 handleSendMessage();
               }
             }}
-            disabled={isLoading || showActions}
+            disabled={isLoading || showActions || isChatCompleted || isConfirmed}
           />
           <button
             onClick={handleSendMessage}
-            disabled={isLoading || !inputText.trim() || showActions}
+            disabled={isLoading || !inputText.trim() || showActions || isChatCompleted || isConfirmed}
             className="bg-inspired hover:bg-inspired-dark disabled:bg-inspired/50 disabled:cursor-not-allowed text-white px-4 rounded-r-xl transition-colors"
           >
             <Send size={20} />

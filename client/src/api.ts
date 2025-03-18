@@ -66,3 +66,72 @@ export const checkConcern = async (input: string) => {
     }
 };
 
+export const shareIdea = async (ideaText: string, email: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/share-idea`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        idea: ideaText, 
+        email: email 
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error sharing idea:", error);
+    throw error;
+  }
+};
+export const shareConcern = async (concernText: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/share-concern`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        concern: concernText 
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error sharing concern:", error);
+    throw error;
+  }
+};
+
+export const shareFeedback = async (feedbackText: string) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/share-feedback`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        feedback: feedbackText 
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("Error sharing feedback:", error);
+    throw error;
+  }
+};
+
