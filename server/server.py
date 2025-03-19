@@ -372,15 +372,16 @@ def check_concern():
         - The user explicitly says they are 'done,' 'finished,' or 'ready' to move on.
         - They ask about starting a 'give feedback,' 'another concern,' or 'share an idea.'
         - They use phrases like 'that's it,' 'submit this,' or 'add another.'
+        - They use phrases like 'that's it,' 'I feel better' or 'Thank you.'
         - The user wants to end the conversation uses phrases like 'bye', 'goodbye', 'see you next time'
         
-        IF ANY SUCH SIGNALS ARE DETECTED IT IS IMPORTANT U DON'T RESPOND.
+        IF ANY SUCH SIGNALS ARE DETECTED IT IS IMPORTANT U ONLY RESPOND WITH 'yes' IN LOWERCASE AND NO PUNCCTUATION.
         
-        ANY OTHER SIGNAL WHERE THE USER STILL IS SHARING THEIR CONCERN OR WANTS TO CONINUE THE CONVERSATION, GENERATE A RESPONSE 'yes'"""
+        ANY OTHER SIGNAL WHERE THE USER STILL IS SHARING THEIR CONCERN OR WANTS TO CONINUE THE CONVERSATION, GENERATE A RESPONSE 'NO'"""
 
     result = query_mistral_ai(input_text, system_prompt)
     if result:
-        return jsonify({"response": result})
+        return jsonify({"text": result})
     else:
         return jsonify({"error": "Failed to get a response from Mistral AI"}), 500
     

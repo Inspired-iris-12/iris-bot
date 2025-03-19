@@ -15,7 +15,6 @@ type MessageType = {
   timestamp: Date;
 };
 
-
 type ConversationType = 'idea' | 'feedback' | 'concern' | 'general' | 'ended';
 type ConversationStage = 'initial' | 'ongoing' | 'confirmation' | 'completed';
 
@@ -43,24 +42,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-
+  // Fixed authentication effect - runs only once and properly sets the email state
   useEffect(() => {
     const storedAuth = localStorage.getItem('authData');
     if (storedAuth) {
       try {
         const authData = JSON.parse(storedAuth);
-        // Check if the stored auth data is still valid
-        // You might want to add token validation or expiry check here
         if (authData.email) {
           setEmail(authData.email);
-          // Automatically authenticate the user
+          console.log("Retrieved email from storage:", authData.email);
         }
       } catch (error) {
-        // If there's an error parsing the stored data, clear it
+        console.error("Error parsing authentication data:", error);
         localStorage.removeItem('authData');
       }
+    } else {
+      console.log("No authentication data found in localStorage");
     }
-  });
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -113,6 +112,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         setIsChatCompleted(true);
       }
     } catch (error) {
+      console.error('Error during conversation handling:', error);
       toast({
         title: "Error",
         description: "Failed to get a response. Please try again.",
@@ -128,7 +128,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       // First submission of an idea
       try {
         const response = await submitIdea(input) as ApiResponse;
-        console.log('hi', response);
+        console.log('Idea response:', response);
+        
+        if (!response || !response.text) {
+          throw new Error('Invalid response from API');
+        }
+        
         const aiMessage: MessageType = {
           id: uuidv4(),
           text: response.text,
@@ -140,6 +145,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         setCurrentProposal(response.text);
         setConversationStage('ongoing');
       } catch (error) {
+        console.error('Error submitting idea:', error);
         toast({
           title: "Error",
           description: "Failed to process your idea. Please try again.",
@@ -153,7 +159,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     
         // Step 1: Check if the idea is ready
         const ideaCheckResponse = await checkIdea(input) as ApiResponse;
-        console.log('idea', ideaCheckResponse);
+        console.log('Idea check response:', ideaCheckResponse);
+        
         if (ideaCheckResponse?.text === "yes") {
           // Move to confirmation stage
           setConversationStage('confirmation');
@@ -169,7 +176,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
           setIsConfirmed(true);
           return;
         }
-    
+        await new Promise(resolve => setTimeout(resolve, 1000));
         // Step 2: If not ready, continue refining the idea
         const lastMessages = messages.slice(-10).map(m =>
           `${m.isUser ? 'User' : 'AI'}: ${m.text}`
@@ -178,6 +185,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         const contextualInput = `Previous conversation:\n${lastMessages}\n\nNew user input:\n${input}`;
     
         const response = await submitIdea(contextualInput) as ApiResponse;
+        
+        if (!response || !response.text) {
+          throw new Error('Invalid response from API');
+        }
     
         const aiMessage: MessageType = {
           id: uuidv4(),
@@ -189,6 +200,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         setMessages(prev => [...prev, aiMessage]);
     
       } catch (error) {
+        console.error('Error processing response:', error);
         toast({
           title: "Error",
           description: "Failed to process your response. Please try again.",
@@ -202,15 +214,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       setIsChatCompleted(true);
     }
   };
-
+ 
   const handleConcernConversation = async (input: string) => {
     if (conversationStage === 'initial') {
       // First submission of a concern
       try {
-        // Share the concern with the API
+        // Share the concern with the AP
+        if (!email) {
+          console.warn("No email available - concern sharing might not work properly");
+        }
+        console.log("Using email for sharing concern:", email);
         await shareConcern(input, email);
         
         const response = await submitConcern(input) as ApiResponse;
+        
+        if (!response || !response.text) {
+          throw new Error('Invalid response from API');
+        }
         
         const aiMessage: MessageType = {
           id: uuidv4(),
@@ -222,6 +242,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         setMessages(prev => [...prev, aiMessage]);
         setConversationStage('ongoing');
       } catch (error) {
+        console.error('Error submitting concern:', error);
         toast({
           title: "Error",
           description: "Failed to process your concern. Please try again.",
@@ -235,7 +256,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         
         // Check if the concern conversation is complete
         const concernCheckResponse = await checkConcern(input) as ApiResponse;
-        
+        console.log(concernCheckResponse)
         if (concernCheckResponse?.text === "yes") {
           // Concern conversation is complete, show options
           const completionMessage: MessageType = {
@@ -249,7 +270,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
           setShowConcernActions(true);
           return;
         }
-  
+        await new Promise(resolve => setTimeout(resolve, 1000));
         // Get last 10 messages as context (including both user and AI)
         const lastMessages = messages.slice(-10).map(m => 
           `${m.isUser ? 'User' : 'AI'}: ${m.text}`
@@ -259,6 +280,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         const contextualInput = `Previous conversation:\n${lastMessages}\n\nNew user input:\n${input}`;
   
         const response = await submitConcern(contextualInput) as ApiResponse;
+        
+        if (!response || !response.text) {
+          throw new Error('Invalid response from API');
+        }
   
         const aiMessage: MessageType = {
           id: uuidv4(),
@@ -270,6 +295,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         setMessages(prev => [...prev, aiMessage]);
   
       } catch (error) {
+        console.error('Error processing concern response:', error);
         toast({
           title: "Error",
           description: "Failed to process your response. Please try again.",
@@ -287,6 +313,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       try {
         const response = await submitFeedback(input) as ApiResponse;
         
+        if (!response || !response.text) {
+          throw new Error('Invalid response from API');
+        }
+        
         const aiMessage: MessageType = {
           id: uuidv4(),
           text: response.text + "\n\nThank you for your feedback! Would you like to share an idea, express a concern, give more feedback, or end our conversation?",
@@ -296,18 +326,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         
         setMessages(prev => [...prev, aiMessage]);
         setConversationStage('completed');
-        setShowActions(true);
+        setIsChatCompleted(true);
         setConversationType('general');
       } catch (error) {
+        console.error('Error submitting feedback:', error);
         toast({
           title: "Error",
           description: "Failed to process your feedback. Please try again.",
           variant: "destructive"
         });
       }
-    } else if (conversationStage === 'completed') {
-      // Check if user wants to do something else
-      setIsChatCompleted(true);
     }
   };
 
@@ -328,11 +356,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       setIsLoading(true);
       try {
         // Get the last AI message as the final idea
-        const lastAIMessage = messages.filter(m => !m.isUser).slice(-2)[0]?.text || '';
-        console.log(lastAIMessage)
+        const lastAIMessage = messages.filter(m => !m.isUser).slice(-2).map(m => m.text).join(" ");
+        console.log('Final idea to share:', lastAIMessage);
+        
         if (lastAIMessage) {
-          console.log(email)
+          if (!email) {
+            console.warn("No email available - idea sharing might not work properly");
+          }
+          console.log("Using email for sharing idea:", email);
           await shareIdea(lastAIMessage, email);
+        } else {
+          console.warn("No AI message found to share");
         }
         
         // Thank user and show final options
@@ -347,6 +381,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         setConversationStage('completed');
         setIsChatCompleted(true);
       } catch (error) {
+        console.error('Error submitting idea confirmation:', error);
         toast({
           title: "Error",
           description: "Failed to submit your idea. Please try again.",
@@ -374,19 +409,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
 
   const handleConcernAction = (action: string) => {
     // Add the user's choice as a message
-    const userMessage: MessageType = {
-      id: uuidv4(),
-      text: action,
-      isUser: true,
-      timestamp: new Date()
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
+
+   
     
     // Hide the concern action buttons
     setShowConcernActions(false);
     
     if (action === "Continue conversation") {
+      const userMessage: MessageType = {
+        id: uuidv4(),
+        text: action,
+        isUser: true,
+        timestamp: new Date()
+      };
+
       const continueMessage: MessageType = {
         id: uuidv4(),
         text: "I'm here to continue discussing your concern. What else would you like to share?",
@@ -394,7 +430,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         timestamp: new Date()
       };
       
-      setMessages(prev => [...prev, continueMessage]);
+      setMessages(prev => [...prev, userMessage, continueMessage]);
       // Stay in ongoing stage
     } else if (action === "Share an idea") {
       startNewConversation('idea', 'Share an idea');
@@ -425,7 +461,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         greeting = "I'm here to listen and help with your concerns. What's troubling you?";
         break;
       case 'ended':
-        greeting = "It was great chatting with you! If you have any other questions or concerns, or feedback plese come back";
+        greeting = "It was great chatting with you! If you have any other questions or concerns, or feedback please come back.";
         break;
       default:
         greeting = "How can I help you today?";
@@ -446,6 +482,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     };
     
     setMessages(prev => [...prev, userMessage, aiMessage]);
+    if (type==='ended'){
+      setIsChatCompleted(false);
+      return;
+    }
   };
 
   const handleBack = () => {
