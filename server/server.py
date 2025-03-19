@@ -7,6 +7,9 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from email.message import EmailMessage
 from mistralai import Mistral
+import os
+import certifi
+os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
 
 app = Flask(__name__)
@@ -208,7 +211,7 @@ def verify_otp():
         return jsonify({"error": "Invalid OTP"}), 400
 
 # Common function to interact with Mistral AI
-def query_mistral_ai(user_input, system_prompt):
+"""def query_mistral_ai(user_input, system_prompt):
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_input},
@@ -218,9 +221,41 @@ def query_mistral_ai(user_input, system_prompt):
         chat_response = client.chat.complete(
             model=model,
             messages=messages,
+            verify="/path/to/cert.pem"
         )
         return chat_response.choices[0].message.content
     except Exception as e:
+        print("Error calling Mistral API:", e)
+        return None"""
+
+def query_mistral_ai(user_input, system_prompt):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_input},
+        ]
+    }
+
+    try:
+        response = requests.post(
+            "https://api.mistral.ai/v1/chat/completions",  # Change this to your Mistral API URL
+            json=data,
+            headers=headers # Disables SSL verification (ONLY for local testing)
+        )
+
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            print("Mistral API Error:", response.text)
+            return None
+
+    except requests.exceptions.RequestException as e:
         print("Error calling Mistral API:", e)
         return None
 
@@ -374,17 +409,38 @@ def share_idea():
     
 @app.route("/share-concern", methods=["POST"])
 def share_concern():
-    data = request.json
-    payload = {"type": "concern", "body": data["concern"], "email": data.get("email", "anonymous@example.com")}
-    response = requests.post(SUPABASE_URL, json=payload, headers=HEADERS)
-    return jsonify(response.json()), response.status_code
+    try:
+        data = request.json
+        payload = {"type": "concern", "body": data["concern"], "email": data.get("email", "anonymous@example.com")}
+        requests.post(SUPABASE_URL, json=payload, headers=HEADERS)
+        return jsonify({
+                "success": True,
+                "message": "Idea shared successfully"
+            }), 200
+    except Exception as e:
+        # Return a simple error response
+        return jsonify({
+            "success": False,
+            "message": "Error processing your request"
+        }), 500
+    
 
 @app.route("/share-feedback", methods=["POST"])
 def share_feedback():
-    data = request.json
-    payload = {"type": "feedback", "body": data["feedback"], "email": data.get("email", "anonymous@example.com")}
-    response = requests.post(SUPABASE_URL, json=payload, headers=HEADERS)
-    return jsonify(response.json()), response.status_code
+    try:
+        data = request.json
+        payload = {"type": "feedback", "body": data["feedback"], "email": data.get("email", "anonymous@example.com")}
+        requests.post(SUPABASE_URL, json=payload, headers=HEADERS)
+        return jsonify({
+                "success": True,
+                "message": "Idea shared successfully"
+            }), 200
+    except Exception as e:
+        # Return a simple error response
+        return jsonify({
+            "success": False,
+            "message": "Error processing your request"
+        }), 500
 
 
 if __name__ == "__main__":

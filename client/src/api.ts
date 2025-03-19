@@ -89,7 +89,7 @@ export const shareIdea = async (ideaText: string, email: string) => {
     throw error;
   }
 };
-export const shareConcern = async (concernText: string) => {
+export const shareConcern = async (concernText: string,email:string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/share-concern`, {
       method: "POST",
@@ -97,7 +97,8 @@ export const shareConcern = async (concernText: string) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ 
-        concern: concernText 
+        concern: concernText,
+        email:email
       })
     });
     

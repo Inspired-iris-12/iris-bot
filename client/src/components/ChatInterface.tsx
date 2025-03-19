@@ -5,7 +5,7 @@ import ChatMessage from './ChatMessage';
 import ActionButton from './ActionButton';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
-import { submitIdea, submitConcern, submitFeedback, checkIdea, checkConcern, shareIdea } from '../api';
+import { submitIdea, submitConcern, submitFeedback, checkIdea, checkConcern, shareIdea, shareConcern } from '../api';
 import { IdeaCheckResponse, ConcernCheckResponse, ApiResponse } from '@/interfaces/types';
 
 type MessageType = {
@@ -35,6 +35,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
   const [conversationStage, setConversationStage] = useState<ConversationStage>('initial');
   const [showActions, setShowActions] = useState(true);
   const [currentProposal, setCurrentProposal] = useState<string>('');
+  const [showConcernActions, setShowConcernActions] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -206,6 +207,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     if (conversationStage === 'initial') {
       // First submission of a concern
       try {
+        // Share the concern with the API
+        await shareConcern(input, email);
+        
         const response = await submitConcern(input) as ApiResponse;
         
         const aiMessage: MessageType = {
@@ -228,6 +232,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       // User has responded to the initial concern handling
       try {
         setIsLoading(true);
+        
+        // Check if the concern conversation is complete
+        const concernCheckResponse = await checkConcern(input) as ApiResponse;
+        
+        if (concernCheckResponse?.text === "yes") {
+          // Concern conversation is complete, show options
+          const completionMessage: MessageType = {
+            id: uuidv4(),
+            text: "Thank you for sharing your concern. Would you like to continue the conversation, share an idea, give feedback, or end our conversation?",
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, completionMessage]);
+          setShowConcernActions(true);
+          return;
+        }
   
         // Get last 10 messages as context (including both user and AI)
         const lastMessages = messages.slice(-10).map(m => 
@@ -257,9 +278,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       } finally {
         setIsLoading(false);
       }
-    } else if (conversationStage === 'completed') {
-      // Check if user wants to do something else
-      setIsChatCompleted(true);
     }
   };
 
@@ -354,11 +372,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     setIsConfirmed(false);
   };
 
+  const handleConcernAction = (action: string) => {
+    // Add the user's choice as a message
+    const userMessage: MessageType = {
+      id: uuidv4(),
+      text: action,
+      isUser: true,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    
+    // Hide the concern action buttons
+    setShowConcernActions(false);
+    
+    if (action === "Continue conversation") {
+      const continueMessage: MessageType = {
+        id: uuidv4(),
+        text: "I'm here to continue discussing your concern. What else would you like to share?",
+        isUser: false,
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, continueMessage]);
+      // Stay in ongoing stage
+    } else if (action === "Share an idea") {
+      startNewConversation('idea', 'Share an idea');
+    } else if (action === "Give feedback") {
+      startNewConversation('feedback', 'Give feedback');
+    } else if (action === "End conversation") {
+      startNewConversation('ended', 'End conversation');
+    }
+  };
+
   const startNewConversation = (type: ConversationType, option: string) => {
     setConversationType(type);
     setShowActions(false);
     setConversationStage('initial');
     setCurrentProposal('');
+    setShowConcernActions(false);
     
     let greeting = '';
     
@@ -402,6 +454,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     setConversationStage('initial');
     setCurrentProposal('');
     setIsConfirmed(false);
+    setShowConcernActions(false);
     
     // Clear previous conversation and start fresh
     setMessages([
@@ -481,6 +534,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
               <ActionButton 
                 label="Give feedback" 
                 onClick={() => startNewConversation('feedback', 'Give feedback')}
+              />
+            </motion.div>
+          )}
+
+          {/* Concern Action Buttons */}
+          {showConcernActions && (
+            <motion.div 
+              className="flex flex-col space-y-3 mt-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.3 }}
+            >
+              <ActionButton 
+                label="Continue conversation" 
+                onClick={() => handleConcernAction('Continue conversation')}
+              />
+              <ActionButton 
+                label="Share an idea" 
+                onClick={() => handleConcernAction('Share an idea')}
+              />
+              <ActionButton 
+                label="Give feedback" 
+                onClick={() => handleConcernAction('Give feedback')}
+              />
+              <ActionButton 
+                label="End conversation" 
+                onClick={() => handleConcernAction('End conversation')}
               />
             </motion.div>
           )}
@@ -565,11 +645,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
                 handleSendMessage();
               }
             }}
-            disabled={isLoading || showActions || isChatCompleted || isConfirmed}
+            disabled={isLoading || showActions || isChatCompleted || isConfirmed || showConcernActions}
           />
           <button
             onClick={handleSendMessage}
-            disabled={isLoading || !inputText.trim() || showActions || isChatCompleted || isConfirmed}
+            disabled={isLoading || !inputText.trim() || showActions || isChatCompleted || isConfirmed || showConcernActions}
             className="bg-inspired hover:bg-inspired-dark disabled:bg-inspired/50 disabled:cursor-not-allowed text-white px-4 rounded-r-xl transition-colors"
           >
             <Send size={20} />
