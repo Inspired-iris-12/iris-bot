@@ -113,7 +113,7 @@ export const shareConcern = async (concernText: string,email:string) => {
   }
 };
 
-export const shareFeedback = async (feedbackText: string) => {
+export const shareFeedback = async (feedbackText: string, email:string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/share-feedback`, {
       method: "POST",
@@ -121,7 +121,8 @@ export const shareFeedback = async (feedbackText: string) => {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ 
-        feedback: feedbackText 
+        feedback: feedbackText,
+        email:email 
       })
     });
     

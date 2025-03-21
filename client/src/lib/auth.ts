@@ -70,22 +70,25 @@ export const verifyOtp = async (
 
 export const signOut = (): void => {
   console.log("signOut function called in auth.ts");
-  
+  const confirmSignOut = window.confirm("Are you sure you want to sign out? All your information and login status will be lost.");
+
+  if (confirmSignOut){
   // Check what's in storage before removal
   console.log("Before removal - localStorage:", localStorage.getItem(LOCAL_STORAGE_AUTH_KEY));
   console.log("Before removal - sessionStorage:", sessionStorage.getItem(LOCAL_STORAGE_AUTH_KEY));
-  
+
   // Clear both storages
   localStorage.removeItem(LOCAL_STORAGE_AUTH_KEY);
   sessionStorage.removeItem(LOCAL_STORAGE_AUTH_KEY);
   
   // Also clear 'authData' key since it's used in your authform.tsx
   localStorage.removeItem('authData');
-  sessionStorage.removeItem('authData');
+  sessionStorage.removeItem('currentUserEmail');
+
   
   // Verify removal
   console.log("After removal - localStorage:", localStorage.getItem(LOCAL_STORAGE_AUTH_KEY));
   console.log("After removal - sessionStorage:", sessionStorage.getItem(LOCAL_STORAGE_AUTH_KEY));
   console.log("After removal - authData localStorage:", localStorage.getItem('authData'));
   console.log("After removal - authData sessionStorage:", sessionStorage.getItem('authData'));
-}
+}}

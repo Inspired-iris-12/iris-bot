@@ -5,7 +5,7 @@ import ChatMessage from './ChatMessage';
 import ActionButton from './ActionButton';
 import { v4 as uuidv4 } from 'uuid';
 import { useToast } from '@/hooks/use-toast';
-import { submitIdea, submitConcern, submitFeedback, checkIdea, checkConcern, shareIdea, shareConcern } from '../api';
+import { submitIdea, submitConcern, submitFeedback, checkIdea, checkConcern, shareIdea, shareConcern, shareFeedback } from '../api';
 import { IdeaCheckResponse, ConcernCheckResponse, ApiResponse } from '@/interfaces/types';
 
 type MessageType = {
@@ -42,22 +42,56 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+
+  useEffect(() => {
+    // Function to handle beforeunload event
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      // Only show warning if user is logged in but didn't select "Remember me"
+      const isLoggedIn = sessionStorage.getItem('currentUserEmail') && !localStorage.getItem('authData');
+      
+      if (isLoggedIn) {
+        // Standard way to show a confirmation dialog when leaving page
+        const message = "Warning: You haven't selected 'Remember me'. Your login information will be lost if you leave this page.";
+        e.preventDefault();
+        e.returnValue = message;
+        return message;
+      }
+    };
+  
+    // Add event listener
+    window.addEventListener('beforeunload', handleBeforeUnload);
+  
+    // Cleanup function
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []); // Empty dependency array means this effect runs once on mount
   // Fixed authentication effect - runs only once and properly sets the email state
   useEffect(() => {
+    // First try to get data from localStorage (for "Remember me" users)
     const storedAuth = localStorage.getItem('authData');
+    
     if (storedAuth) {
       try {
         const authData = JSON.parse(storedAuth);
         if (authData.email) {
           setEmail(authData.email);
-          console.log("Retrieved email from storage:", authData.email);
+          console.log("Retrieved email from localStorage:", authData.email);
         }
       } catch (error) {
-        console.error("Error parsing authentication data:", error);
+        console.error("Error parsing authentication data from localStorage:", error);
         localStorage.removeItem('authData');
       }
     } else {
-      console.log("No authentication data found in localStorage");
+      // If not in localStorage, check sessionStorage (for session-only users)
+      const sessionEmail = sessionStorage.getItem('currentUserEmail');
+      
+      if (sessionEmail) {
+        setEmail(sessionEmail);
+        console.log("Retrieved email from sessionStorage:", sessionEmail);
+      } else {
+        console.log("No authentication data found in either localStorage or sessionStorage");
+      }
     }
   }, []);
 
@@ -323,7 +357,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
           isUser: false,
           timestamp: new Date()
         };
-        
+        const respose = await shareFeedback(input,email) as ApiResponse;
         setMessages(prev => [...prev, aiMessage]);
         setConversationStage('completed');
         setIsChatCompleted(true);

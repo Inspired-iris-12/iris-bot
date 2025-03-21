@@ -92,6 +92,7 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
   
       if (response.message === "OTP verified successfully") {
         // Store authentication data if "Remember me" is checked
+        sessionStorage.setItem('currentUserEmail', email);
         if (rememberMe) {
           const authData = {
             email: email,
@@ -128,17 +129,24 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
   // Function to handle sign out
   const handleSignOut = (event: React.MouseEvent<HTMLButtonElement>) => {
     // Prevent default behavior if needed
+    console.log('aaaaa')
     event.preventDefault();
     
-    localStorage.removeItem('authData');
-    setEmail('');
-    setOtp('');
-    setOtpSent(false);
-    setRememberMe(false);
-    toast({
-      title: "Signed out",
-      description: "You have been signed out successfully",
-    });
+    // Show confirmation dialog
+    const confirmSignOut = window.confirm("Are you sure you want to sign out? All your information and login status will be lost.");
+    
+    if (confirmSignOut) {
+      localStorage.removeItem('authData');
+      sessionStorage.removeItem('currentUserEmail');
+      setEmail('');
+      setOtp('');
+      setOtpSent(false);
+      setRememberMe(false);
+      toast({
+        title: "Signed out",
+        description: "You have been signed out successfully",
+      });
+    }
   };
 
   const formVariants = {
