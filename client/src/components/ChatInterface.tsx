@@ -534,8 +534,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
             )}
             <h1 className="text-xl font-semibold text-white">InspirED to Speak</h1>
           </div>
-          <button 
-            onClick={onSignOut}
+          <button
+            onClick={() => {
+              console.log("Button clicked in ChatInterface");
+              onSignOut();
+            }}
             className="text-white text-sm hover:underline"
           >
             Sign out

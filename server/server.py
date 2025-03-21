@@ -10,7 +10,10 @@ from mistralai import Mistral
 import os
 import certifi
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+from dotenv import load_dotenv
 
+
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -126,12 +129,12 @@ context = """
 
 """
 # Email credentials (store securely in env variables)
-EMAIL_ADDRESS = "irisinspired12@gmail.com"
-EMAIL_PASSWORD = "jjak zjvb wqfw rzdo"  # Use the Gmail App Password
+EMAIL_ADDRESS = os.getenv("EMAIL")
+EMAIL_PASSWORD = os.getenv("PASSWORD")  # Use the Gmail App Password
 
 
-SUPABASE_URL = "https://hbsuoavhzsrrxjejsliv.supabase.co/rest/v1/all"
-SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhic3VvYXZoenNycnhqZWpzbGl2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczNTM5NTI3OSwiZXhwIjoyMDUwOTcxMjc5fQ.odvwrNBJ0aM7ebO86IiOqGSFBHM-RxagZZnhfGagP0w"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY")
 HEADERS = {
     "Accept": "application/json",
     "apikey": SUPABASE_API_KEY,
@@ -142,13 +145,33 @@ HEADERS = {
 otp_store = {}
 
 # Mistral AI API configuration
-api_key = "FoLPS1mCuOlLGQCDTdztvD4o3Ds8Y4E6"
+api_key = os.getenv("MISTRAL_API_KEY")
 model = "mistral-large-latest"
 client = Mistral(api_key=api_key)
 
 def generate_otp():
     """Generate a 6-digit OTP."""
     return str(random.randint(100000, 999999))
+
+
+def mail_response(subject,body,sender):
+    """Send an email with the OTP."""
+    msg = EmailMessage()
+    msg.set_content(f"{body}\n\n{sender}")
+    msg["Subject"] = f"Recieved {subject}"
+    msg["From"] = EMAIL_ADDRESS
+    msg["To"] = EMAIL_ADDRESS
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print("Error sending email:", e)
+        return False
+
+
 
 def send_email(to_email, otp):
     """Send an email with the OTP."""
@@ -394,7 +417,7 @@ def share_idea():
         
         # Still make the request to Supabase
         requests.post(SUPABASE_URL, json=payload, headers=HEADERS)
-        
+        mail_response('idea', data["idea"],data.get("email", "anonymous@example.com"))
         # Return a simple success response
         return jsonify({
             "success": True,
@@ -414,6 +437,7 @@ def share_concern():
         data = request.json
         payload = {"type": "concern", "body": data["concern"], "email": data.get("email", "anonymous@example.com")}
         requests.post(SUPABASE_URL, json=payload, headers=HEADERS)
+        mail_response('concern', data["concern"],data.get("email", "anonymous@example.com"))
         return jsonify({
                 "success": True,
                 "message": "Idea shared successfully"
@@ -432,6 +456,7 @@ def share_feedback():
         data = request.json
         payload = {"type": "feedback", "body": data["feedback"], "email": data.get("email", "anonymous@example.com")}
         requests.post(SUPABASE_URL, json=payload, headers=HEADERS)
+        mail_response('feedback', data["feedback"],data.get("email", "anonymous@example.com"))
         return jsonify({
                 "success": True,
                 "message": "Idea shared successfully"

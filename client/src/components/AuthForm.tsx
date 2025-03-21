@@ -126,7 +126,10 @@ const AuthForm: React.FC<AuthFormProps> = ({ onAuthenticated }) => {
   };
   
   // Function to handle sign out
-  const handleSignOut = () => {
+  const handleSignOut = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent default behavior if needed
+    event.preventDefault();
+    
     localStorage.removeItem('authData');
     setEmail('');
     setOtp('');

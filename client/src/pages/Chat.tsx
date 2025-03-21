@@ -10,8 +10,11 @@ interface ChatProps {
 
 const Chat: React.FC<ChatProps> = ({ onSignOut }) => {
   const handleSignOut = () => {
+    console.log("handleSignOut called in Chat.tsx");
     signOut();
+    console.log("After signOut");
     onSignOut();
+    console.log("After onSignOut");
   };
 
   return (
