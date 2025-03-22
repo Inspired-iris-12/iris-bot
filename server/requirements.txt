@@ -1,0 +1,8 @@
+flask
+flask-cors
+requests
+mistralai
+certifi
+python-dotenv
+smtplib
+email
