@@ -4,4 +4,3 @@ requests
 mistralai
 certifi
 python-dotenv
-email
