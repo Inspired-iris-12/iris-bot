@@ -151,8 +151,8 @@ client = Mistral(api_key=api_key)
 print(api_key)
 def generate_otp():
     """Generate a 6-digit OTP."""
-    #return str(random.randint(100000, 999999))
-    return '111111'
+    return str(random.randint(100000, 999999))
+    
 
 
 def mail_response(subject,body,sender):
