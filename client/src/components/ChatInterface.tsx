@@ -375,7 +375,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
 
   // Handle confirmation response for idea submission
   const handleIdeaConfirmation = async (isConfirmed: boolean) => {
+    
     // First, add the user's choice as a message
+
     const userMessage: MessageType = {
       id: uuidv4(),
       text: isConfirmed ? "Yes" : "No",
@@ -386,6 +388,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     setMessages(prev => [...prev, userMessage]);
     
     if (isConfirmed) {
+      setIsConfirmed(false)
       // User confirmed, submit the idea
       setIsLoading(true);
       try {
@@ -478,6 +481,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
   const startNewConversation = (type: ConversationType, option: string) => {
     setConversationType(type);
     setShowActions(false);
+    setIsChatCompleted(false);
     setConversationStage('initial');
     setCurrentProposal('');
     setShowConcernActions(false);
