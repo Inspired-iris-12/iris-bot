@@ -4,3 +4,4 @@ requests
 mistralai
 certifi
 python-dotenv
+gunicorn
