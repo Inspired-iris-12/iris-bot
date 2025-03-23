@@ -4,5 +4,4 @@ requests
 mistralai
 certifi
 python-dotenv
-smtplib
 email
