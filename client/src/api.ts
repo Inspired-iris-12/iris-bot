@@ -2,8 +2,8 @@ import axios from "axios";
 import { OtpResponse } from "@/interfaces/types";
 import { ApiResponse, StreamingApiResponse, IdeaCheckResponse, ConcernCheckResponse } from '@/interfaces/types';
 
-const API_BASE_URL = "https://iris-bot-jr71.onrender.com"; // Flask server
-
+//const API_BASE_URL = "https://iris-bot-jr71.onrender.com"; // Flask server
+const API_BASE_URL = "http://127.0.0.1:5000"; 
 // OTP APIs
 export const FetchOtp = async (email: string) => {
     return axios.post(`${API_BASE_URL}/send-otp`, { email });
@@ -17,53 +17,238 @@ export const VerifyOtp = async (email: string, otp: string) => {
     throw error;
   }
 };
+export const submitIdea = async (input) => {
+  const url = `${API_BASE_URL}/submit-idea?input=${encodeURIComponent(input)}`;
+  console.log('Submitting GET to:', url);
 
-// Project-related APIs
-export const submitIdea = async (input: string) => {
-    try {
-        const response = await axios.post(`${API_BASE_URL}/submit-idea`, { input });
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+    cache: "no-store",
+  });
 
-        return response.data;
-        
-    } catch (error) {
-        throw error;
-    }
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errorText}`);
+  }
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+
+  return {
+    onData: (callback) => {
+      if (!reader) throw new Error('No reader available');
+      const readStream = async () => {
+        try {
+          let buffer = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            console.log('Reader result:', { done, value: value ? `Uint8Array[${value.length}]` : 'undefined' });
+            if (done) {
+              console.log('Stream ended');
+              break;
+            }
+
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+
+            // Split by double newline (SSE standard)
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || ''; // Keep incomplete line
+
+            lines.forEach(line => {
+              const content = line.replace(/^data:\s*/, ''); // Remove 'data: ' once, preserve rest
+              if (content) {
+                console.log('Processed content:', repr(content)); // Use repr to show spaces/newlines
+                callback(content); // Pass raw content with spaces and newlines
+              }
+            });
+          }
+
+          // Process remaining buffer
+          if (buffer) {
+            const content = buffer.replace(/^data:\s*/, '');
+            if (content) {
+              console.log('Final buffer content:', repr(content));
+              callback(content);
+            }
+          }
+        } catch (error) {
+          console.error('Stream reading error:', error);
+          throw error;
+        }
+      };
+      return readStream();
+    },
+    cleanup: () => reader?.cancel(),
+  };
 };
 
-export const submitConcern = async (input: string) => {
-    try {
-        const response = await axios.post(`${API_BASE_URL}/submit-concern`, { input });
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
+// Helper to mimic Python's repr for logging
+function repr(str) {
+  return JSON.stringify(str).slice(1, -1); // Show raw string with escapes
+}
+
+export const submitConcern = async (input) => {
+  const url = `${API_BASE_URL}/submit-concern?input=${encodeURIComponent(input)}`;
+  console.log('Submitting GET to:', url);
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+    cache: "no-store",
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errorText}`);
+  }
+  
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  
+  return {
+    onData: (callback) => {
+      if (!reader) throw new Error('No reader available');
+      const readStream = async () => {
+        try {
+          let buffer = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            console.log('Reader result:', { done, value: value ? `Uint8Array[${value.length}]` : 'undefined' });
+            
+            if (done) {
+              console.log('Stream ended');
+              break;
+            }
+            
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
+            
+            lines.forEach(line => {
+              const content = line.replace(/^data:\s*/, '');
+              if (content) {
+                console.log('Processed content:', content);
+                callback(content);
+              }
+            });
+          }
+          
+          if (buffer) {
+            const content = buffer.replace(/^data:\s*/, '');
+            if (content) {
+              console.log('Final buffer content:', content);
+              callback(content);
+            }
+          }
+        } catch (error) {
+          console.error('Stream reading error:', error);
+          throw error;
+        }
+      };
+      return readStream();
+    },
+    onError: (errorCallback) => {
+      // Placeholder for error handling if needed
+      console.error('Stream error occurred');
+      errorCallback(new Error('Stream error'));
+    },
+    cleanup: () => reader?.cancel(),
+  };
 };
 
-export const submitFeedback = async (input: string) => {
-    try {
-        const response = await axios.post(`${API_BASE_URL}/submit-feedback`, { input });
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
+export const submitFeedback = async (input) => {
+  const url = `${API_BASE_URL}/submit-feedback?input=${encodeURIComponent(input)}`;
+  console.log('Submitting GET to:', url);
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Accept": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+    cache: "no-store",
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP error! Status: ${response.status}, Body: ${errorText}`);
+  }
+  
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  
+  return {
+    onData: (callback) => {
+      if (!reader) throw new Error('No reader available');
+      const readStream = async () => {
+        try {
+          let buffer = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            console.log('Reader result:', { done, value: value ? `Uint8Array[${value.length}]` : 'undefined' });
+            
+            if (done) {
+              console.log('Stream ended');
+              break;
+            }
+            
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+            
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
+            
+            lines.forEach(line => {
+              const content = line.replace(/^data:\s*/, '');
+              if (content) {
+                console.log('Processed content:', content);
+                callback(content);
+              }
+            });
+          }
+          
+          if (buffer) {
+            const content = buffer.replace(/^data:\s*/, '');
+            if (content) {
+              console.log('Final buffer content:', content);
+              callback(content);
+            }
+          }
+        } catch (error) {
+          console.error('Stream reading error:', error);
+          throw error;
+        }
+      };
+      return readStream();
+    },
+    onError: (errorCallback) => {
+      // Placeholder for error handling if needed
+      console.error('Stream error occurred');
+      errorCallback(new Error('Stream error'));
+    },
+    cleanup: () => reader?.cancel(),
+  };
+};
+// Non-streaming APIs
+export const checkIdea = async (input) => {
+  const response = await axios.post(`${API_BASE_URL}/check-idea`, { input });
+  return response.data;
 };
 
-export const checkIdea = async (input: string) => {
-    try {
-        const response = await axios.post(`${API_BASE_URL}/check-idea`, { input });
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
-};
-
-export const checkConcern = async (input: string) => {
-    try {
-        const response = await axios.post(`${API_BASE_URL}/check-concern`, { input });
-        return response.data;
-    } catch (error) {
-        throw error;
-    }
+export const checkConcern = async (input) => {
+  const response = await axios.post(`${API_BASE_URL}/check-concern`, { input });
+  return response.data;
 };
 
 export const shareIdea = async (ideaText: string, email: string) => {

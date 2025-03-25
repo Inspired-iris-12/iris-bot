@@ -2,8 +2,9 @@ import smtplib
 import os
 import random
 import time
+import json
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify,Response,stream_with_context
 from flask_cors import CORS
 from email.message import EmailMessage
 from mistralai import Mistral
@@ -148,7 +149,7 @@ otp_store = {}
 api_key = os.getenv("MISTRAL_API_KEY")
 model = "mistral-large-latest"
 client = Mistral(api_key=api_key)
-print(api_key)
+
 def generate_otp():
     """Generate a 6-digit OTP."""
     return str(random.randint(100000, 999999))
@@ -251,91 +252,118 @@ def verify_otp():
     except Exception as e:
         print("Error calling Mistral API:", e)
         return None"""
-
-def query_mistral_ai(user_input, system_prompt):
+def query_mistral_ai(user_input, system_prompt, stream=False):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-
     data = {
         "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_input},
-        ]
+        ],
+        "stream": stream
     }
+    print(f"Sending request to Mistral API with input: {user_input}")
+    response = requests.post(
+        "https://api.mistral.ai/v1/chat/completions",
+        json=data,
+        headers=headers,
+        stream=stream
+    )
+    print(f"Mistral API status: {response.status_code}")
+    
+    if response.status_code != 200:
+        print(f"Mistral API error: {response.text}")
+        return Response(f"Mistral API error: {response.text}", status=response.status_code)
 
-    try:
-        response = requests.post(
-            "https://api.mistral.ai/v1/chat/completions",  # Change this to your Mistral API URL
-            json=data,
-            headers=headers # Disables SSL verification (ONLY for local testing)
-        )
-
-        if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
-        else:
-            print("Mistral API Error:", response.text)
-            return None
-
-    except requests.exceptions.RequestException as e:
-        print("Error calling Mistral API:", e)
-        return None
+    if stream:
+        def generate():
+            print("Starting Mistral stream")
+            for line in response.iter_lines():
+                if line:
+                    decoded = line.decode("utf-8")
+               
+                    try:
+                        # Parse JSON without stripping
+                        chunk = json.loads(decoded.replace('data: ', '', 1))  # Remove 'data: ' once
+                        content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "") or \
+                                 chunk.get("choices", [{}])[0].get("message", {}).get("content", "")
+                        if content:
+                       
+                 
+                            yield f"{content}"  # Preserve spaces and newlines
+                            time.sleep(0.05)  # Small delay for client compatibility
+                    except (json.JSONDecodeError, KeyError, IndexError) as e:
+                        print(f"Error processing chunk: {e}")
+            print("Mistral stream completed")
+        return Response(stream_with_context(generate()), mimetype="text/event-stream", headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Transfer-Encoding": "chunked"
+        })
+    else:
+        result = response.json()["choices"][0]["message"]["content"]
+        print(f"Non-streaming result: {result}")
+        return result
 
 # **Define routes for idea, concern, feedback, check-idea, and check-concern**
-@app.route("/submit-idea", methods=["POST"])
+@app.route("/submit-idea", methods=["GET"])
 def submit_idea():
-    data = request.get_json()
-    input_text = data.get("input")  # Idea submission
-    system_prompt = f"""<context>{context}</context>\nYou are an AI assistant designed to help users generate a detailed outline for a proposal form based on a brief idea they provide. The proposal will be implemented in a high school context. Use uploaded documents, such as school information, to make the response highly specific.
+    input_text = request.args.get("input")  # Idea submission
+    system_prompt = f""""<context>{context}</context>
+You are an AI assistant designed to help users generate a detailed outline for a proposal form based on a brief idea they provide. The proposal will be implemented in a high school context. Use uploaded documents, such as school information, to make the response highly specific.
 
 DO NOT HELP STUDENTS WITH HOMEWORK OR ANY OTHER FORM OF ASSISTANCE. YOUR MAIN JOB IS TO EVALUATE IDEAS ONLY.
 YOU MUST STRICTLY FOLLOW THE STRUCTURE BELOW WHEN GENERATING A PROPOSAL FORM.
+
 Instructions:
 
     Title/Name of the Idea:
-        Start with a concise and clear name for the idea (e.g., "Chess Club" or "Library App").
+        Output the heading "Title/Name of the Idea:".
+        Output the idea name (e.g., "Chess Club") on the next line.
 
     Explanation / Benefits:
-        Provide a short explanation of the idea, ensuring it follows the style of the provided example.
-        Cover:
+        Output the heading "Explanation / Benefits:".
+        Output the explanation as a single paragraph, covering:
             What the idea is.
             Which year group(s) of students it is for.
             The benefits it will provide to the school and students.
 
     Objective(s):
-        Clearly outline the key objectives of the idea.
-        Present them as a bulleted list, as seen in the provided example.
+        Output the heading "Objective(s):".
+        Output the objectives as a bulleted list, with each bullet starting with "- " (e.g., "- To teach students...").
 
     Process:
-        Provide a step-by-step implementation plan in a structured and detailed manner, similar to the provided example.
-        Ensure each key aspect is bolded, followed by a clear description (e.g., Team Enrollment:, Age Brackets:, etc.).
+        Output the heading "**Process:**".
+        For each subheading (e.g., "**Club Formation:**"):
+            Output the subheading.
+            Output the description as a paragraph.
         Include:
             Where and when it will be implemented in the school (use the provided school documents for details about rooms, classes, and other resources).
             Identify relevant teachers or staff members to reach out to for assistance, including their specific names and roles based on the provided school documents.
             Specify any materials or resources needed for execution, ensuring they are directly tied to the resources available within the school.
 
 Important Notes:
-    ENSURE PROPOSAL FORM IS 250-#)) WORDS LONG ONLY.
+    ENSURE PROPOSAL FORM IS 250-300 WORDS LONG ONLY.
     Ensure all resources and materials align with what is available at the school, as described in the provided documents. Do not reference or create any external or non-existent resources.
     When mentioning teachers or staff, ensure their names, roles, and contact details are accurate and drawn from the provided knowledge. Avoid making up any details.
-    The final proposal form must match the format of the provided Battle of the Bands example, ensuring consistency in headings, bold formatting, and bullet points.
+    For streaming: Output each heading, idea name, paragraph, bullet point, and subheading as a separate chunk to ensure smooth streaming.
 
 Behavioral Style:
-
     Use friendly and conversational language while keeping the response professional and structured.
     Ensure the output is concise yet detailed enough to guide the user effectively.
     If the input is offensive, inappropriate, or irrelevant, respond with a blank output. THIS IS CRUCIAL AND MUST BE FOLLOWED.
     DO NOT HELP STUDENTS WITH HOMEWORK OR ASSIGNMENTS at all.
     DO NOT ADDRESS MESSAGES ON HOMOPHOBIA, TRANSPHOBIA, OR HOMOSEXUALITY, ANY POLITICAL OR RADICAL OPINIONS."""
+    return query_mistral_ai(input_text, system_prompt, stream=True)
 
-    result = query_mistral_ai(input_text, system_prompt)
-    if result:
-        return jsonify({"text": result})
-    else:
-        return jsonify({"error": "Failed to get a response from Mistral AI"}), 500
 
+
+
+
+   
 @app.route("/submit-concern", methods=["POST"])
 def submit_concern():
     data = request.get_json()
@@ -356,12 +384,7 @@ def submit_concern():
         - DO NOT HELP STUDENTS WITH HOMEWORK, OR ASSIGNMENTS at all.
         - DO NOT ADRESS MESSAGES ON HOMOPHOBIA, TRANSPHOBIA, OR HOMOSEXUALITY, ANY POLITICAL OR RADICAL OPINIONS."""
 
-    result = query_mistral_ai(input_text, system_prompt)
-    print(result)
-    if result:
-        return jsonify({"text": result})
-    else:
-        return jsonify({"error": "Failed to get a response from Mistral AI"}), 500
+    return query_mistral_ai(input_text, system_prompt, stream=True)
 
 @app.route("/submit-feedback", methods=["POST"])
 def submit_feedback():
@@ -376,11 +399,7 @@ def submit_feedback():
         - DO NOT HELP STUDENTS WITH HOMEWORK, OR ASSIGNMENTS at all.
         - DO NOT ADRESS MESSAGES ON HOMOPHOBIA, TRANSPHOBIA, OR HOMOSEXUALITY, ANY POLITICAL OR RADICAL OPINIONS."""
     
-    result = query_mistral_ai(input_text, system_prompt)
-    if result:
-        return jsonify({"text": result})
-    else:
-        return jsonify({"error": "Failed to get a response from Mistral AI"}), 500
+    return query_mistral_ai(input_text, system_prompt, stream=True)
 
 @app.route("/check-idea", methods=["POST"])
 def check_idea():
@@ -392,7 +411,7 @@ def check_idea():
 - If satisfied or willing to share, respond with: **yes**  
 - Otherwise, respond with: **no**  
 Reply with **only** `yes` or `no`, without punctuation or explanation."""
-    result = query_mistral_ai(input_text, system_prompt)
+    result = query_mistral_ai(input_text, system_prompt,False)
     if result:
         return jsonify({"text": result})
     else:
@@ -413,7 +432,7 @@ def check_concern():
         
         ANY OTHER SIGNAL WHERE THE USER STILL IS SHARING THEIR CONCERN OR WANTS TO CONINUE THE CONVERSATION, GENERATE A RESPONSE 'NO'"""
 
-    result = query_mistral_ai(input_text, system_prompt)
+    result = query_mistral_ai(input_text, system_prompt,False)
     if result:
         return jsonify({"text": result})
     else:

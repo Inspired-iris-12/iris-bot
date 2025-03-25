@@ -13,6 +13,7 @@ type MessageType = {
   text: string;
   isUser: boolean;
   timestamp: Date;
+  isStreamingUpdate: boolean; // Add to type
 };
 
 type ConversationType = 'idea' | 'feedback' | 'concern' | 'general' | 'ended';
@@ -107,13 +108,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
           id: '1',
           text: "Hi I'm iris",
           isUser: false,
-          timestamp: new Date()
+          timestamp: new Date(),
+          isStreamingUpdate: false
         },
         {
           id: '2',
           text: "How can I assist you today! Would you like to share an idea, express a concern, or give feedback?",
           isUser: false,
-          timestamp: new Date()
+          timestamp: new Date(),
+          isStreamingUpdate: false
         }
       ]);
     }, 500);
@@ -126,7 +129,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       id: uuidv4(),
       text: inputText,
       isUser: true,
-      timestamp: new Date()
+      timestamp: new Date(),
+      isStreamingUpdate: false
+
     };
     
     setMessages(prev => [...prev, userMessage]);
@@ -159,32 +164,89 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
 
   const handleIdeaConversation = async (input: string) => {
     if (conversationStage === 'initial') {
-      // First submission of an idea
       try {
-        const response = await submitIdea(input) as ApiResponse;
-        console.log('Idea response:', response);
-        
-        if (!response || !response.text) {
-          throw new Error('Invalid response from API');
-        }
-        
-        const aiMessage: MessageType = {
+        setIsLoading(true);
+        console.log('Starting idea submission with input:', input);
+        const stream = await submitIdea(input);
+        let fullResponse = '';
+  
+        console.log('Stream initiated');
+  
+        const initialAiMessage: MessageType = {
           id: uuidv4(),
-          text: response.text,
+          text: '',
           isUser: false,
-          timestamp: new Date()
+          timestamp: new Date(),
+          isStreamingUpdate: false,
         };
-        
-        setMessages(prev => [...prev, aiMessage]);
-        setCurrentProposal(response.text);
-        setConversationStage('ongoing');
-      } catch (error) {
-        console.error('Error submitting idea:', error);
-        toast({
-          title: "Error",
-          description: "Failed to process your idea. Please try again.",
-          variant: "destructive"
+  
+        setMessages(prev => [...prev, initialAiMessage]);
+  
+        // Track the last section to determine spacing
+        let lastSection = '';
+  
+        await stream.onData((content: string) => {
+          console.log('Received content:', JSON.stringify(content));
+  
+          // Normalize spacing based on content type
+          if (content === "Title/Name of the Idea:") {
+            fullResponse += content + '\n\n';
+            lastSection = 'title';
+          } else if (content === "Explanation / Benefits:") {
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'explanation';
+          } else if (content === "Objective(s):") {
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'objectives';
+          } else if (content === "**Process:**") {
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'process';
+          } else if (content.startsWith('**') && content.endsWith(':**')) {
+            // Subheading under Process
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'process-subheading';
+          } else if (content.startsWith('- ')) {
+            // Bullet point under Objective(s)
+            fullResponse += content + '\n';
+            lastSection = 'bullet';
+          } else {
+            // Paragraph or idea name
+            if (lastSection === 'title') {
+              fullResponse += content + '\n\n';
+            } else if (lastSection === 'bullet') {
+              fullResponse += content + (content.startsWith('- ') ? '\n' : '\n\n');
+            } else {
+              fullResponse += content + '\n\n';
+            }
+            lastSection = 'paragraph';
+          }
+  
+          setMessages(prev => {
+            const updatedMessages = [...prev];
+            const lastMessageIndex = updatedMessages.length - 1;
+            updatedMessages[lastMessageIndex] = {
+              ...updatedMessages[lastMessageIndex],
+              text: fullResponse,
+              isStreamingUpdate: true,
+            };
+            console.log('Updating messages, current fullResponse:', JSON.stringify(fullResponse));
+            return updatedMessages;
+          });
         });
+  
+        console.log('Stream completed, final response:', JSON.stringify(fullResponse));
+        setConversationStage('ongoing');
+        setCurrentProposal(fullResponse);
+        setIsLoading(false);
+  
+      } catch (error) {
+        console.error('Stream error:', error);
+        toast({ 
+          title: "Error", 
+          description: "Failed to process stream", 
+          variant: "destructive" 
+        });
+        setIsLoading(false);
       }
     } else if (conversationStage === 'ongoing') {
       // User has given feedback on the proposal
@@ -203,7 +265,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
             id: uuidv4(),
             text: "Your idea is ready to be submitted. Would you like to proceed?",
             isUser: false,
-            timestamp: new Date()
+            timestamp: new Date(),
+            isStreamingUpdate: false
           };
           
           setMessages(prev => [...prev, confirmationMessage]);
@@ -218,31 +281,92 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     
         const contextualInput = `Previous conversation:\n${lastMessages}\n\nNew user input:\n${input}`;
     
-        const response = await submitIdea(contextualInput) as ApiResponse;
-        
-        if (!response || !response.text) {
-          throw new Error('Invalid response from API');
-        }
-    
-        const aiMessage: MessageType = {
+     
+          setIsLoading(true);
+     
+          const stream = await submitIdea(contextualInput);
+          let fullResponse = '';
+  
+        console.log('Stream initiated');
+  
+        const initialAiMessage: MessageType = {
           id: uuidv4(),
-          text: response.text,
+          text: '',
           isUser: false,
-          timestamp: new Date()
+          timestamp: new Date(),
+          isStreamingUpdate: false,
         };
-    
-        setMessages(prev => [...prev, aiMessage]);
-    
-      } catch (error) {
-        console.error('Error processing response:', error);
-        toast({
-          title: "Error",
-          description: "Failed to process your response. Please try again.",
-          variant: "destructive"
+  
+        setMessages(prev => [...prev, initialAiMessage]);
+  
+        // Track the last section to determine spacing
+        let lastSection = '';
+  
+        await stream.onData((content: string) => {
+          console.log('Received content:', JSON.stringify(content));
+  
+          // Normalize spacing based on content type
+          if (content === "Title/Name of the Idea:") {
+            fullResponse += content + '\n\n';
+            lastSection = 'title';
+          } else if (content === "Explanation / Benefits:") {
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'explanation';
+          } else if (content === "Objective(s):") {
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'objectives';
+          } else if (content === "**Process:**") {
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'process';
+          } else if (content.startsWith('**') && content.endsWith(':**')) {
+            // Subheading under Process
+            fullResponse += '\n\n' + content + '\n\n';
+            lastSection = 'process-subheading';
+          } else if (content.startsWith('- ')) {
+            // Bullet point under Objective(s)
+            fullResponse += content + '\n';
+            lastSection = 'bullet';
+          } else {
+            // Paragraph or idea name
+            if (lastSection === 'title') {
+              fullResponse += content + '\n\n';
+            } else if (lastSection === 'bullet') {
+              fullResponse += content + (content.startsWith('- ') ? '\n' : '\n\n');
+            } else {
+              fullResponse += content + '\n\n';
+            }
+            lastSection = 'paragraph';
+          }
+  
+          setMessages(prev => {
+            const updatedMessages = [...prev];
+            const lastMessageIndex = updatedMessages.length - 1;
+            updatedMessages[lastMessageIndex] = {
+              ...updatedMessages[lastMessageIndex],
+              text: fullResponse,
+              isStreamingUpdate: true,
+            };
+            console.log('Updating messages, current fullResponse:', JSON.stringify(fullResponse));
+            return updatedMessages;
+          });
         });
-      } finally {
+  
+        console.log('Stream completed, final response:', JSON.stringify(fullResponse));
+        setConversationStage('ongoing');
+        setCurrentProposal(fullResponse);
         setIsLoading(false);
-      }
+    
+        } catch (error) {
+          console.error('Stream error:', error);
+          toast({ 
+            title: "Error", 
+            description: "Failed to process stream", 
+            variant: "destructive" 
+          });
+          setIsLoading(false);
+        }finally {
+        setIsLoading(false); // This might move inside onData/onError depending on desired behavior
+        }
     } else if (conversationStage === 'completed') {
       // Check if user wants to do something else
       setIsChatCompleted(true);
@@ -260,29 +384,60 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         console.log("Using email for sharing concern:", email);
         await shareConcern(input, email);
         
-        const response = await submitConcern(input) as ApiResponse;
-        
-        if (!response || !response.text) {
-          throw new Error('Invalid response from API');
-        }
-        
-        const aiMessage: MessageType = {
-          id: uuidv4(),
-          text: response.text,
-          isUser: false,
-          timestamp: new Date()
+        setIsLoading(true);
+    console.log('Starting concern submission with input:', input);
+    const stream = await submitConcern(input); // Await initial fetch
+    let fullResponse = '';
+
+    console.log('Stream initiated');
+
+    // Create an initial empty AI message
+    const initialAiMessage: MessageType = {
+      id: uuidv4(),
+      text: '',
+      isUser: false,
+      timestamp: new Date(),
+      isStreamingUpdate: false, // First appearance animates
+    };
+
+    // Add the initial empty message
+    setMessages(prev => [...prev, initialAiMessage]);
+
+    await stream.onData((chunk: string) => {
+      console.log('Received content:', JSON.stringify(chunk));
+      fullResponse += chunk;
+
+      // Update the last message
+      setMessages(prev => {
+        const updatedMessages = [...prev];
+        const lastMessageIndex = updatedMessages.length - 1;
+        updatedMessages[lastMessageIndex] = {
+          ...updatedMessages[lastMessageIndex],
+          text: fullResponse,
+          isStreamingUpdate: true, // No animation for updates
         };
-        
-        setMessages(prev => [...prev, aiMessage]);
-        setConversationStage('ongoing');
-      } catch (error) {
-        console.error('Error submitting concern:', error);
-        toast({
-          title: "Error",
-          description: "Failed to process your concern. Please try again.",
-          variant: "destructive"
-        });
-      }
+        console.log('Updating messages, current fullResponse:', JSON.stringify(fullResponse));
+        return updatedMessages;
+      });
+    });
+
+    stream.onError((error: any) => {
+      console.error('Stream error:', error);
+      toast({ title: "Error", description: "Streaming failed.", variant: "destructive" });
+      stream.cleanup();
+      setIsLoading(false);
+    });
+
+    console.log('Stream completed, final response:', JSON.stringify(fullResponse));
+    setConversationStage('ongoing');
+    setCurrentProposal(fullResponse);
+    setIsLoading(false);
+
+  } catch (error) {
+    console.error('Error initiating concern stream:', error);
+    toast({ title: "Error", description: "Failed to start stream.", variant: "destructive" });
+    setIsLoading(false);
+  }
     } else if (conversationStage === 'ongoing') {
       // User has responded to the initial concern handling
       try {
@@ -297,7 +452,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
             id: uuidv4(),
             text: "Thank you for sharing your concern. Would you like to continue the conversation, share an idea, give feedback, or end our conversation?",
             isUser: false,
-            timestamp: new Date()
+            timestamp: new Date(),
+            isStreamingUpdate: false
           };
           
           setMessages(prev => [...prev, completionMessage]);
@@ -313,30 +469,62 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         // Append user input with previous messages for context
         const contextualInput = `Previous conversation:\n${lastMessages}\n\nNew user input:\n${input}`;
   
-        const response = await submitConcern(contextualInput) as ApiResponse;
-        
-        if (!response || !response.text) {
-          throw new Error('Invalid response from API');
-        }
-  
-        const aiMessage: MessageType = {
+        const stream = await submitConcern(contextualInput); // Await initial fetch
+        setIsLoading(true);
+        console.log('Starting concern submission with input:', input);
+      // Await initial fetch
+        let fullResponse = '';
+    
+        console.log('Stream initiated');
+    
+        // Create an initial empty AI message
+        const initialAiMessage: MessageType = {
           id: uuidv4(),
-          text: response.text,
+          text: '',
           isUser: false,
-          timestamp: new Date()
+          timestamp: new Date(),
+          isStreamingUpdate: false, // First appearance animates
         };
-  
-        setMessages(prev => [...prev, aiMessage]);
-  
-      } catch (error) {
-        console.error('Error processing concern response:', error);
-        toast({
-          title: "Error",
-          description: "Failed to process your response. Please try again.",
-          variant: "destructive"
+    
+        // Add the initial empty message
+        setMessages(prev => [...prev, initialAiMessage]);
+    
+        await stream.onData((chunk: string) => {
+          console.log('Received content:', JSON.stringify(chunk));
+          fullResponse += chunk;
+    
+          // Update the last message
+          setMessages(prev => {
+            const updatedMessages = [...prev];
+            const lastMessageIndex = updatedMessages.length - 1;
+            updatedMessages[lastMessageIndex] = {
+              ...updatedMessages[lastMessageIndex],
+              text: fullResponse,
+              isStreamingUpdate: true, // No animation for updates
+            };
+            console.log('Updating messages, current fullResponse:', JSON.stringify(fullResponse));
+            return updatedMessages;
+          });
         });
-      } finally {
+    
+        stream.onError((error: any) => {
+          console.error('Stream error:', error);
+          toast({ title: "Error", description: "Streaming failed.", variant: "destructive" });
+          stream.cleanup();
+          setIsLoading(false);
+        });
+    
+        console.log('Stream completed, final response:', JSON.stringify(fullResponse));
+        setConversationStage('ongoing');
+        setCurrentProposal(fullResponse);
         setIsLoading(false);
+    
+      } catch (error) {
+        console.error('Error initiating concern stream:', error);
+        toast({ title: "Error", description: "Failed to start stream.", variant: "destructive" });
+        setIsLoading(false);
+      }finally {
+        setIsLoading(false); // Consider moving this based on streaming completion
       }
     }
   };
@@ -345,31 +533,61 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     if (conversationStage === 'initial') {
       // Submit feedback
       try {
-        const response = await submitFeedback(input) as ApiResponse;
-        
-        if (!response || !response.text) {
-          throw new Error('Invalid response from API');
+    
+          setIsLoading(true);
+          console.log('Starting feedback submission with input:', input);
+          const stream = await submitFeedback(input); // Await initial fetch
+          let fullResponse = '';
+      
+          console.log('Stream initiated');
+      
+          // Create an initial empty AI message
+          const initialAiMessage: MessageType = {
+            id: uuidv4(),
+            text: '',
+            isUser: false,
+            timestamp: new Date(),
+            isStreamingUpdate: false, // First appearance animates
+          };
+      
+          // Add the initial empty message
+          setMessages(prev => [...prev, initialAiMessage]);
+      
+          await stream.onData((chunk: string) => {
+            console.log('Received content:', JSON.stringify(chunk));
+            fullResponse += chunk;
+      
+            // Update the last message
+            setMessages(prev => {
+              const updatedMessages = [...prev];
+              const lastMessageIndex = updatedMessages.length - 1;
+              updatedMessages[lastMessageIndex] = {
+                ...updatedMessages[lastMessageIndex],
+                text: fullResponse,
+                isStreamingUpdate: true, // No animation for updates
+              };
+              console.log('Updating messages, current fullResponse:', JSON.stringify(fullResponse));
+              return updatedMessages;
+            });
+          });
+      
+          stream.onError((error: any) => {
+            console.error('Stream error:', error);
+            toast({ title: "Error", description: "Streaming failed.", variant: "destructive" });
+            stream.cleanup();
+            setIsLoading(false);
+          });
+      
+          console.log('Stream completed, final response:', JSON.stringify(fullResponse));
+          setConversationStage('ongoing');
+          setCurrentProposal(fullResponse);
+          setIsLoading(false);
+      
+        } catch (error) {
+          console.error('Error initiating feedback stream:', error);
+          toast({ title: "Error", description: "Failed to start stream.", variant: "destructive" });
+          setIsLoading(false);
         }
-        
-        const aiMessage: MessageType = {
-          id: uuidv4(),
-          text: response.text + "\n\nThank you for your feedback! Would you like to share an idea, express a concern, give more feedback, or end our conversation?",
-          isUser: false,
-          timestamp: new Date()
-        };
-        const respose = await shareFeedback(input,email) as ApiResponse;
-        setMessages(prev => [...prev, aiMessage]);
-        setConversationStage('completed');
-        setIsChatCompleted(true);
-        setConversationType('general');
-      } catch (error) {
-        console.error('Error submitting feedback:', error);
-        toast({
-          title: "Error",
-          description: "Failed to process your feedback. Please try again.",
-          variant: "destructive"
-        });
-      }
     }
   };
 
@@ -382,7 +600,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       id: uuidv4(),
       text: isConfirmed ? "Yes" : "No",
       isUser: true,
-      timestamp: new Date()
+      timestamp: new Date(),
+      isStreamingUpdate: false
     };
     
     setMessages(prev => [...prev, userMessage]);
@@ -411,7 +630,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
           id: uuidv4(),
           text: "Thank you! Your idea has been submitted successfully. Would you like to share another idea, express a concern, give feedback, or end our conversation?",
           isUser: false,
-          timestamp: new Date()
+          timestamp: new Date(),
+          isStreamingUpdate: false
         };
         
         setMessages(prev => [...prev, finalMessage]);
@@ -433,7 +653,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         id: uuidv4(),
         text: "No problem. Let's continue refining your idea. What would you like to change or add?",
         isUser: false,
-        timestamp: new Date()
+        timestamp: new Date(),
+        isStreamingUpdate: false
       };
       
       setMessages(prev => [...prev, declineMessage]);
@@ -457,14 +678,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         id: uuidv4(),
         text: action,
         isUser: true,
-        timestamp: new Date()
+        timestamp: new Date(),
+        isStreamingUpdate: false
       };
 
       const continueMessage: MessageType = {
         id: uuidv4(),
         text: "I'm here to continue discussing your concern. What else would you like to share?",
         isUser: false,
-        timestamp: new Date()
+        timestamp: new Date(),
+        isStreamingUpdate: false
       };
       
       setMessages(prev => [...prev, userMessage, continueMessage]);
@@ -509,14 +732,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       id: uuidv4(),
       text: option,
       isUser: true,
-      timestamp: new Date()
+      timestamp: new Date(),
+      isStreamingUpdate: false
     };
     
     const aiMessage: MessageType = {
       id: uuidv4(),
       text: greeting,
       isUser: false,
-      timestamp: new Date()
+      timestamp: new Date(),
+      isStreamingUpdate: false
     };
     
     setMessages(prev => [...prev, userMessage, aiMessage]);
@@ -540,13 +765,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
         id: '1',
         text: "Hi I'm iris",
         isUser: false,
-        timestamp: new Date()
+        timestamp: new Date(),
+        isStreamingUpdate: false
       },
       {
         id: '2',
         text: "How can I assist you today! Would you like to share an idea, express a concern, or give feedback?",
         isUser: false,
-        timestamp: new Date()
+        timestamp: new Date(),
+        isStreamingUpdate: false
       }
     ]);
   };
@@ -585,16 +812,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       </div>
       
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 bg-inspired-background">
-        <div className="max-w-3xl mx-auto">
-          <AnimatePresence>
-            {messages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-              />
-            ))}
-          </AnimatePresence>
+{/* Messages Area */}
+<div className="flex-1 overflow-y-auto p-4 bg-inspired-background">
+  <div className="max-w-3xl mx-auto">
+    <AnimatePresence>
+      {messages.map((message, index) => (
+        <ChatMessage
+          key={`message-${message.id}`}
+          message={message}
+          isLastMessage={index === messages.length - 1}
+        />
+      ))}
+    </AnimatePresence>
+    {/* Rest of the code remains the same */}
           
           {/* Quick Action Buttons */}
           {showActions && messages.length >= 2 && (
