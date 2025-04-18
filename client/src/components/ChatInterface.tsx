@@ -139,6 +139,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     setIsLoading(true);
     
     try {
+
+      if (conversationType === 'ended') {
+        setConversationType('general');
+        setConversationStage('initial');
+        setIsChatCompleted(false);
+        setShowActions(false);
+  
+        // Custom "welcome back" message
+        const aiMessage: MessageType = {
+          id: uuidv4(),
+          text: "Welcome back! How can I help you now?",
+          isUser: false,
+          timestamp: new Date(),
+          isStreamingUpdate: false
+        };
+        setMessages(prev => [...prev, aiMessage]);
+        setIsLoading(false);
+        setShowActions(true);
+        return;
+      }
       // Handle based on conversation type and stage
       if (conversationType === 'idea') {
         await handleIdeaConversation(inputText);
@@ -263,7 +283,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
           
           const confirmationMessage: MessageType = {
             id: uuidv4(),
-            text: "Your idea is ready to be submitted. Would you like to proceed?",
+            text: "Please confirm, would you like to submit your idea?",
             isUser: false,
             timestamp: new Date(),
             isStreamingUpdate: false
@@ -582,7 +602,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
           setConversationStage('ongoing');
           setCurrentProposal(fullResponse);
           setIsLoading(false);
-      
+          setIsChatCompleted(true);
         } catch (error) {
           console.error('Error initiating feedback stream:', error);
           toast({ title: "Error", description: "Failed to start stream.", variant: "destructive" });

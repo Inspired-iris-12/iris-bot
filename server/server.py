@@ -386,20 +386,13 @@ def submit_concern():
 
     return query_mistral_ai(input_text, system_prompt, stream=True)
 
-@app.route("/submit-feedback", methods=["POST"])
+@app.route('/submit-feedback', methods=['POST'])
 def submit_feedback():
-    data = request.get_json()
-    input_text = data.get("input")  # Feedback submission
-    system_prompt = """ You r part of the InspirED team, and the feedback given is also for the InspirED team. Give an appropriate 5-10 friendly response to the feedback proivded
-        
-        **ENSURE YOUR RESPONSE IS 5-10 WORDS ONLY**
-        
-        **YOUR RESPONSE SHOULD ALSO BE CLOSE ENDED NOT REQUIRING A RESPONSE FROM THE USER, IT IS HIGHLY IMPORTANT YOU FOLLOW THIS**
-        
-        - DO NOT HELP STUDENTS WITH HOMEWORK, OR ASSIGNMENTS at all.
-        - DO NOT ADRESS MESSAGES ON HOMOPHOBIA, TRANSPHOBIA, OR HOMOSEXUALITY, ANY POLITICAL OR RADICAL OPINIONS."""
-    
-    return query_mistral_ai(input_text, system_prompt, stream=True)
+    def generate():
+        # Example: stream feedback processing
+        yield 'data: Thank you for your feedback!\n\n'
+        # Add more yields as needed for streaming
+    return Response(generate(), mimetype='text/event-stream')
 
 @app.route("/check-idea", methods=["POST"])
 def check_idea():

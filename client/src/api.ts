@@ -93,27 +93,29 @@ function repr(str) {
   return JSON.stringify(str).slice(1, -1); // Show raw string with escapes
 }
 
+// ... existing code ...
+
 export const submitConcern = async (input) => {
-  const url = `${API_BASE_URL}/submit-concern?input=${encodeURIComponent(input)}`;
-  console.log('Submitting GET to:', url);
-  const response = await fetch(url, {
-    method: "GET",
+  const response = await fetch(`${API_BASE_URL}/submit-concern`, {
+    method: "POST",
     headers: {
+      "Content-Type": "application/json",
       "Accept": "text/event-stream",
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
     },
+    body: JSON.stringify({ input }),
     cache: "no-store",
   });
-  
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`HTTP error! Status: ${response.status}, Body: ${errorText}`);
   }
-  
+
   const reader = response.body?.getReader();
   const decoder = new TextDecoder();
-  
+
   return {
     onData: (callback) => {
       if (!reader) throw new Error('No reader available');
@@ -123,18 +125,18 @@ export const submitConcern = async (input) => {
           while (true) {
             const { done, value } = await reader.read();
             console.log('Reader result:', { done, value: value ? `Uint8Array[${value.length}]` : 'undefined' });
-            
+
             if (done) {
               console.log('Stream ended');
               break;
             }
-            
+
             const chunk = decoder.decode(value, { stream: true });
             buffer += chunk;
-            
+
             const lines = buffer.split('\n\n');
             buffer = lines.pop() || '';
-            
+
             lines.forEach(line => {
               const content = line.replace(/^data:\s*/, '');
               if (content) {
@@ -143,7 +145,7 @@ export const submitConcern = async (input) => {
               }
             });
           }
-          
+
           if (buffer) {
             const content = buffer.replace(/^data:\s*/, '');
             if (content) {
@@ -167,79 +169,83 @@ export const submitConcern = async (input) => {
   };
 };
 
+// ... existing code ...
+
 export const submitFeedback = async (input) => {
-  const url = `${API_BASE_URL}/submit-feedback?input=${encodeURIComponent(input)}`;
-  console.log('Submitting GET to:', url);
-  const response = await fetch(url, {
-    method: "GET",
+  const response = await fetch(`${API_BASE_URL}/submit-feedback`, {
+    method: "POST",
     headers: {
+      "Content-Type": "application/json",
       "Accept": "text/event-stream",
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
     },
+    body: JSON.stringify({ input }),
     cache: "no-store",
   });
-  
+
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`HTTP error! Status: ${response.status}, Body: ${errorText}`);
   }
-  
+
   const reader = response.body?.getReader();
   const decoder = new TextDecoder();
-  
+
+  let errorCallback = null; // Store error callback
+
   return {
-    onData: (callback) => {
+    onData: async (callback) => {
       if (!reader) throw new Error('No reader available');
-      const readStream = async () => {
-        try {
-          let buffer = '';
-          while (true) {
-            const { done, value } = await reader.read();
-            console.log('Reader result:', { done, value: value ? `Uint8Array[${value.length}]` : 'undefined' });
-            
-            if (done) {
-              console.log('Stream ended');
-              break;
-            }
-            
-            const chunk = decoder.decode(value, { stream: true });
-            buffer += chunk;
-            
-            const lines = buffer.split('\n\n');
-            buffer = lines.pop() || '';
-            
-            lines.forEach(line => {
-              const content = line.replace(/^data:\s*/, '');
-              if (content) {
-                console.log('Processed content:', content);
-                callback(content);
-              }
-            });
+      try {
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          console.log('Reader result:', { done, value: value ? `Uint8Array[${value.length}]` : 'undefined' });
+
+          if (done) {
+            console.log('Stream ended');
+            break;
           }
-          
-          if (buffer) {
-            const content = buffer.replace(/^data:\s*/, '');
+
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
+
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          lines.forEach(line => {
+            const content = line.replace(/^data:\s*/, '');
             if (content) {
-              console.log('Final buffer content:', content);
+              console.log('Processed content:', content);
               callback(content);
             }
-          }
-        } catch (error) {
-          console.error('Stream reading error:', error);
-          throw error;
+          });
         }
-      };
-      return readStream();
+
+        if (buffer) {
+          const content = buffer.replace(/^data:\s*/, '');
+          if (content) {
+            console.log('Final buffer content:', content);
+            callback(content);
+          }
+        }
+      } catch (error) {
+        console.error('Stream reading error:', error);
+        if (errorCallback) errorCallback(error);
+        throw error;
+      }
     },
-    onError: (errorCallback) => {
-      // Placeholder for error handling if needed
-      console.error('Stream error occurred');
-      errorCallback(new Error('Stream error'));
+    onError: (cb) => {
+      errorCallback = cb;
     },
     cleanup: () => reader?.cancel(),
   };
 };
+
+// ... existing code ...
+
+// ... existing code ...
 // Non-streaming APIs
 export const checkIdea = async (input) => {
   const response = await axios.post(`${API_BASE_URL}/check-idea`, { input });
