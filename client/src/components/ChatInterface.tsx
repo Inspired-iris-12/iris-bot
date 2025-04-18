@@ -730,10 +730,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
     setShowConcernActions(false);
     
     let greeting = '';
-    
+    let help = '';
     switch(type) {
       case 'idea':
-        greeting = "That's great! I'd love to hear your idea. Please provide a brief description of your idea.";
+        greeting = "That's great! I'd love to hear your idea. Please provide a brief description of your idea, so that we can build a proposal form to share.";
+        help = "I am still an AI, so my response may not be perfect, you can ask for changes, and I shall ask for confirmation before you want to submit your proposal form.";
         break;
       case 'feedback':
         greeting = "Thank you for wanting to provide feedback. What would you like to share about your experience?";
@@ -763,6 +764,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onSignOut }) => {
       timestamp: new Date(),
       isStreamingUpdate: false
     };
+    if (type==='idea'){
+      const aiMessage: MessageType = {
+        id: uuidv4(),
+        text: help,
+        isUser: false,
+        timestamp: new Date(),
+        isStreamingUpdate: false
+      };
+    }
     
     setMessages(prev => [...prev, userMessage, aiMessage]);
     if (type==='ended'){
