@@ -3,7 +3,7 @@ import { OtpResponse } from "@/interfaces/types";
 import { ApiResponse, StreamingApiResponse, IdeaCheckResponse, ConcernCheckResponse } from '@/interfaces/types';
 
 //const API_BASE_URL = "https://iris-bot-jr71.onrender.com"; // Flask server
-const API_BASE_URL = "https://iris-bot-ivu6.onrender.com"; 
+const API_BASE_URL = "https://iris-bot-0r5m.onrender.com"; 
 // OTP APIs
 export const FetchOtp = async (email: string) => {
     return axios.post(`${API_BASE_URL}/send-otp`, { email });
